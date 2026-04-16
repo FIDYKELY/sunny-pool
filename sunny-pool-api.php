@@ -755,6 +755,19 @@ function sunny_pool_api_chat($request) {
     $image_base64_raw= $params['image_base64'] ?? '';   // peut contenir le préfixe data:image/...
     $analyse_user    = $params['analyse']      ?? [];
     $conversation_id = sanitize_text_field($params['conversation_id'] ?? '');
+    $image_type      = sanitize_text_field($params['image_type'] ?? 'general');
+
+    // ── 1. Options pour contrôler quelles données sont injectées dans n8n ─
+    $data_options_in = $params['data_options'] ?? [];
+    $data_options_in = is_array($data_options_in) ? $data_options_in : [];
+
+    // Valeurs optimisées : ne charger que si explicitement demandé
+    $opt_meteo       = !empty($data_options_in['meteo']);
+    $opt_historique  = !empty($data_options_in['historique']);
+    $opt_produits    = !empty($data_options_in['produits']);
+    $opt_alertes     = !empty($data_options_in['alertes']);
+    $opt_planning    = !empty($data_options_in['planning']);
+    $opt_coordonnees = !empty($data_options_in['coordonnees']);
 
     if (empty($message) && empty($image_base64_raw)) {
         return new WP_REST_Response([
@@ -846,86 +859,89 @@ function sunny_pool_api_chat($request) {
         $lon_s = get_field('longitude', $selected_pool_id);
         if ($lat_s && $lon_s) { $lat = floatval($lat_s); $lon = floatval($lon_s); }
 
-        // Lire les produits depuis la meta JSON (comme dans single-piscine.php)
-        $produits_json = get_post_meta($selected_pool_id, '_sunny_produits', true);
-        $produits_list = $produits_json ? json_decode($produits_json, true) : [];
-
-        // Fallback ACF si pas encore migré
-        if (empty($produits_list)) {
-            $produits_acf = get_field('produits', $selected_pool_id);
-            $produits_list = !empty($produits_acf) && is_array($produits_acf) ? $produits_acf : [];
+        // ── 2. Coordonnées : reset à 0 si météo non demandée ─────────────────
+        // Cela évite à n8n de lancer l'API Open-Meteo inutilement
+        if (!$opt_meteo || !$opt_coordonnees) {
+            $lat = 0;
+            $lon = 0;
         }
 
-        foreach ($produits_list as $p) {
-            $nom = $p['nom_produit'] ?? ($p['nom'] ?? '');
-            if ($nom) {
-                $label = sunny_pool_get_product_label($nom);
-                $qty   = $p['quantite'] ?? '';
-                $unite = $p['unite']    ?? '';
-                $produits_noms[] = trim($label . ($qty ? " ({$qty} {$unite})" : ''));
+        // ── 3. Produits (Uniquement si demandé) ───────────────────────────────
+        if ($opt_produits) {
+            $produits_json = get_post_meta($selected_pool_id, '_sunny_produits', true);
+            $produits_list = $produits_json ? json_decode($produits_json, true) : [];
 
-                // Données complètes pour n8n
-                $photo_face_url   = $p['photo_face'] ?? '';
-                $photo_notice_url = $p['photo_notice'] ?? '';
+            // Fallback ACF si pas encore migré
+            if (empty($produits_list)) {
+                $produits_acf = get_field('produits', $selected_pool_id);
+                $produits_list = !empty($produits_acf) && is_array($produits_acf) ? $produits_acf : [];
+            }
 
-                $produits_data[] = [
-                    'nom_produit'        => $nom,
-                    'label'              => $label,
-                    'categorie'          => $p['categorie'] ?? '',
-                    'marque'             => $p['marque'] ?? '',
-                    'quantite'           => $qty,
-                    'unite'              => $unite,
-                    'date_ajout'         => $p['date_ajout'] ?? '',
-                    'commentaire'        => $p['commentaire'] ?? '',
-                    'photo_face_url'     => $photo_face_url,
-                    'photo_notice_url'   => $photo_notice_url,
-                    'photo_face_base64'  => sunny_url_to_base64($photo_face_url),
-                    'photo_notice_base64'=> sunny_url_to_base64($photo_notice_url),
-                ];
+            foreach ($produits_list as $p) {
+                $nom = $p['nom_produit'] ?? ($p['nom'] ?? '');
+                if ($nom) {
+                    $label = sunny_pool_get_product_label($nom);
+                    $qty   = $p['quantite'] ?? '';
+                    $unite = $p['unite']    ?? '';
+                    $produits_noms[] = trim($label . ($qty ? " ({$qty} {$unite})" : ''));
+
+                    // Données complètes pour n8n (conversion base64 lourde)
+                    $photo_face_url   = $p['photo_face'] ?? '';
+                    $photo_notice_url = $p['photo_notice'] ?? '';
+
+                    $produits_data[] = [
+                        'nom_produit'        => $nom,
+                        'label'              => $label,
+                        'categorie'          => $p['categorie'] ?? '',
+                        'marque'             => $p['marque'] ?? '',
+                        'quantite'           => $qty,
+                        'unite'              => $unite,
+                        'date_ajout'         => $p['date_ajout'] ?? '',
+                        'commentaire'        => $p['commentaire'] ?? '',
+                        'photo_face_url'     => $photo_face_url,
+                        'photo_notice_url'   => $photo_notice_url,
+                        'photo_face_base64'  => sunny_url_to_base64($photo_face_url),
+                        'photo_notice_base64'=> sunny_url_to_base64($photo_notice_url),
+                    ];
+                }
             }
         }
 
         // ── Récupérer une image de la piscine en base64 ──────────────
-        // Si aucune image n'a été envoyée par le frontend, on essaie de récupérer
-        // la première photo depuis le champ ACF 'photos_de_la_piscine'
+        // [DÉSACTIVÉ] : L'image n'est plus envoyée automatiquement pour éviter
+        // la lenteur à chaque message. L'image est maintenant analysée uniquement
+        // lorsque l'utilisateur envoie volontairement une photo depuis le chat.
+        // L'utilisateur veut analyser une photo ? Il l'envoie explicitement.
+        /*
         if (empty($image_base64)) {
             $photos = get_field('photos_de_la_piscine', $selected_pool_id);
 
             if (!empty($photos) && is_array($photos)) {
-                // Prendre la première photo
                 $first_photo = $photos[0];
                 $image_id = is_array($first_photo) ? ($first_photo['ID'] ?? 0) : intval($first_photo);
 
                 if ($image_id) {
-                    // Récupérer le chemin physique du fichier
                     $image_path = get_attached_file($image_id);
 
                     if ($image_path && file_exists($image_path)) {
                         $image_size = filesize($image_path);
 
-                        // Limite de taille : 5Mo pour éviter les problèmes mémoire
                         if ($image_size < 5 * 1024 * 1024) {
                             $file_data = file_get_contents($image_path);
                             $file_type = wp_check_filetype($image_path)['type'] ?: 'image/jpeg';
-
-                            // Convertir en base64 avec le préfixe data URI
                             $image_base64_raw = 'data:' . $file_type . ';base64,' . base64_encode($file_data);
 
-                            // Extraire le base64 pur (sans le préfixe) pour n8n
                             if (preg_match('/^data:image\/[^;]+;base64,(.+)$/s', $image_base64_raw, $m)) {
                                 $image_base64 = $m[1];
                             }
 
-                            error_log('[Sunny Chat] Image pool récupérée: ' . round($image_size / 1024, 2) . ' Ko, type: ' . $file_type);
-                        } else {
-                            error_log('[Sunny Chat] Image trop lourde (' . round($image_size / 1024 / 1024, 2) . ' Mo), ignorée');
+                            error_log('[Sunny Chat] Image pool récupérée: ' . round($image_size / 1024, 2) . ' Ko');
                         }
-                    } else {
-                        error_log('[Sunny Chat] Chemin image introuvable pour ID: ' . $image_id);
                     }
                 }
             }
         }
+        */
     }
 
     // ── session_id et conversation_id ────────────────────────────
@@ -946,43 +962,47 @@ function sunny_pool_api_chat($request) {
             : null;
     }
 
-    // ── Récupérer l'historique de conversation ──────────────────
+    // ── 4. Historique (Uniquement si demandé) ─────────────────────
     $history_formatted = [];
-    $table_name = $wpdb->prefix . 'sunny_chat_messages';
-    $messages_history = $wpdb->get_results($wpdb->prepare(
-        "SELECT message, response, created_at FROM $table_name
-         WHERE pool_id = %d AND user_id = %d
-         ORDER BY created_at DESC LIMIT 20",
-        $selected_pool_id, $user_id
-    ), ARRAY_A);
+    if ($opt_historique) {
+        $table_name = $wpdb->prefix . 'sunny_chat_messages';
+        $messages_history = $wpdb->get_results($wpdb->prepare(
+            "SELECT message, response, created_at FROM $table_name
+             WHERE pool_id = %d AND user_id = %d
+             ORDER BY created_at DESC LIMIT 20",
+            $selected_pool_id, $user_id
+        ), ARRAY_A);
 
-    if (!empty($messages_history)) {
-        // Inverser pour avoir l'ordre chronologique (ancien → récent)
-        $messages_history = array_reverse($messages_history);
-        foreach ($messages_history as $msg) {
-            if (!empty($msg['message']) && $msg['message'] !== '[callback]') {
-                $history_formatted[] = ['role' => 'user', 'content' => '[HISTORIQUE] ' . $msg['message']];
-            }
-            if (!empty($msg['response'])) {
-                $history_formatted[] = ['role' => 'assistant', 'content' => '[HISTORIQUE] ' . $msg['response']];
+        if (!empty($messages_history)) {
+            // Inverser pour avoir l'ordre chronologique (ancien → récent)
+            $messages_history = array_reverse($messages_history);
+            foreach ($messages_history as $msg) {
+                if (!empty($msg['message']) && $msg['message'] !== '[callback]') {
+                    $history_formatted[] = ['role' => 'user', 'content' => '[HISTORIQUE] ' . $msg['message']];
+                }
+                if (!empty($msg['response'])) {
+                    $history_formatted[] = ['role' => 'assistant', 'content' => '[HISTORIQUE] ' . $msg['response']];
+                }
             }
         }
     }
 
-    // ── Payload pour n8n ─────────────────────────────────────────
+    // ── 5. Payload Final (Nettoyé) ────────────────────────────────
     $n8n_payload = [
         'session_id'       => $session_id,
         'conversation_id'  => $final_conversation_id,
         'callback_url'     => $callback_url,
         'message'          => $message,
-        'image_base64'     => $image_base64,   // base64 pur (vide si pas d'image)
-        'latitude'         => $lat,
-        'longitude'        => $lon,
+        'image_base64'     => $image_base64,     // base64 pur (vide si pas d'image)
+        'image_type'       => $image_type,       // 'water' | 'product' | 'pool' | 'general'
+        'latitude'         => $lat,              // 0 si pas de météo
+        'longitude'        => $lon,              // 0 si pas de météo
         'pool'             => $pool_data,
         'analyse'          => $analyse,
-        'produits'         => $produits_data,
-        'produits_summary' => $produits_noms, // Garder aussi le résumé textuel
-        'history'          => $history_formatted, // ← Historique pour contexte
+        'produits'         => $produits_data,    // Vide si option décochée
+        'produits_summary' => $produits_noms,    // Vide si option décochée
+        'history'          => $history_formatted, // Vide si option décochée
+        'data_options'     => $data_options_in,  // On transmet les choix pour que n8n s'adapte
         'wp_pool_id'       => $selected_pool_id,
         'wp_user_id'       => $user_id,
     ];

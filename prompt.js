@@ -13,6 +13,15 @@ const wb = $("Webhook").first().json.body || {};
 const pool = wb.pool || {};
 const analyse = wb.analyse || {};
 
+const imageType = wb.image_type || 'general';
+const dataOptions = wb.data_options || {};
+
+const optMeteo = dataOptions.meteo !== false; // default: true
+const optHistorique = dataOptions.historique !== false; // default: true
+const optProduits = dataOptions.produits !== false; // default: true
+const optAlertes = dataOptions.alertes !== false; // default: true
+const optPlanning = !!dataOptions.planning; // default: false
+
 // ── Météo ──────────────────────────────────────────────
 const meteoData = $input.first().json || {};
 const daily = meteoData.daily || {};
@@ -33,20 +42,26 @@ const traitPool = ({ chlore: 'chlore', brome: 'brome', electrolyse: 'électrolys
 
 // ── Alertes eau automatiques ────────────────────────────
 const alertes = [];
-if (analyse.ph !== null && analyse.ph !== undefined) {
-  if (analyse.ph < 7.0) alertes.push({ urgence: 'haute', msg: 'pH trop bas (' + analyse.ph + ') → eau agressive, ajouter pH+' });
-  if (analyse.ph > 7.6) alertes.push({ urgence: 'haute', msg: 'pH trop élevé (' + analyse.ph + ') → chlore inefficace, corriger pH en premier' });
+if (optAlertes) {
+  if (analyse.ph !== null && analyse.ph !== undefined) {
+    if (analyse.ph < 7.0) alertes.push({ urgence: 'haute', msg: 'pH trop bas (' + analyse.ph + ') → eau agressive, ajouter pH+' });
+    if (analyse.ph > 7.6) alertes.push({ urgence: 'haute', msg: 'pH trop élevé (' + analyse.ph + ') → chlore inefficace, corriger pH en premier' });
+  }
+  if (analyse.chlore !== null && analyse.chlore !== undefined && analyse.chlore < 0.5)
+    alertes.push({ urgence: 'haute', msg: 'Chlore très bas (' + analyse.chlore + ' mg/L) → désinfection insuffisante' });
+  if (analyse.tac !== null && analyse.tac !== undefined && analyse.tac < 80)
+    alertes.push({ urgence: 'moyenne', msg: 'TAC bas (' + analyse.tac + ' mg/L) → pH instable, corriger en premier' });
+  if (analyse.stabilisant !== null && analyse.stabilisant !== undefined && analyse.stabilisant > 60)
+    alertes.push({ urgence: 'moyenne', msg: 'Stabilisant élevé (' + analyse.stabilisant + ' mg/L) → dilution + stop chlore stabilisé' });
+
+  // Alertes météo uniquement si la météo est transmise
+  if (optMeteo) {
+    if (maxT > 33) alertes.push({ urgence: 'haute', msg: 'Canicule ' + maxT + '°C → filtration 24h/24' });
+    else if (maxT > 28) alertes.push({ urgence: 'haute', msg: 'Fortes chaleurs ' + maxT + '°C → augmenter filtration' });
+    if (minT < 3) alertes.push({ urgence: 'haute', msg: 'Risque gel ' + minT + '°C → filtration nuit obligatoire' });
+    if (parseFloat(pluie) > 20) alertes.push({ urgence: 'haute', msg: 'Fortes pluies ' + pluie + 'mm → surveiller équilibre' });
+  }
 }
-if (analyse.chlore !== null && analyse.chlore !== undefined && analyse.chlore < 0.5)
-  alertes.push({ urgence: 'haute', msg: 'Chlore très bas (' + analyse.chlore + ' mg/L) → désinfection insuffisante' });
-if (analyse.tac !== null && analyse.tac !== undefined && analyse.tac < 80)
-  alertes.push({ urgence: 'moyenne', msg: 'TAC bas (' + analyse.tac + ' mg/L) → pH instable, corriger en premier' });
-if (analyse.stabilisant !== null && analyse.stabilisant !== undefined && analyse.stabilisant > 60)
-  alertes.push({ urgence: 'moyenne', msg: 'Stabilisant élevé (' + analyse.stabilisant + ' mg/L) → dilution + stop chlore stabilisé' });
-if (maxT > 33) alertes.push({ urgence: 'haute', msg: 'Canicule ' + maxT + '°C → filtration 24h/24' });
-else if (maxT > 28) alertes.push({ urgence: 'haute', msg: 'Fortes chaleurs ' + maxT + '°C → augmenter filtration' });
-if (minT < 3) alertes.push({ urgence: 'haute', msg: 'Risque gel ' + minT + '°C → filtration nuit obligatoire' });
-if (parseFloat(pluie) > 20) alertes.push({ urgence: 'haute', msg: 'Fortes pluies ' + pluie + 'mm → surveiller équilibre' });
 
 // ── Planning ──────────────────────────────────────────
 const planning = {
@@ -57,11 +72,15 @@ const planning = {
 
 // ── Historique de conversation (envoyé par WordPress) ──
 let conversationHistory = [];
-if (wb.history) {
+if (optHistorique && wb.history) {
   try {
-    const parsed = JSON.parse(wb.history);
-    if (Array.isArray(parsed)) {
-      conversationHistory = parsed.slice(-20);
+    if (Array.isArray(wb.history)) {
+      conversationHistory = wb.history.slice(-20);
+    } else {
+      const parsed = JSON.parse(wb.history);
+      if (Array.isArray(parsed)) {
+        conversationHistory = parsed.slice(-20);
+      }
     }
   } catch (e) { conversationHistory = []; }
 }
@@ -1018,8 +1037,6 @@ automatisation fiable
 👉 Le gel est le plus gros risque → toujours anticiper`;
 
 // ── System Prompt ──────────────────────────────────────
-const produitsBruts = wb.produits || [];
-
 // Fonction pour formater une date (YYYY-MM-DD HH:MM:SS) → JJ/MM/AAAA
 function formatDateShort(dateStr) {
   if (!dateStr) return '';
@@ -1036,6 +1053,8 @@ const CATS_LABELS = {
   floculant: 'Floculant', sequestrant_calcaire: 'Séquestrant calcaire',
   sequestrant_metaux: 'Séquestrant métaux'
 };
+
+const produitsBruts = optProduits ? (wb.produits || []) : [];
 
 let produitsTexte = '';
 let nbPhotosDisponibles = 0;
@@ -1067,355 +1086,128 @@ if (Array.isArray(produitsBruts) && produitsBruts.length > 0) {
     }).join('\n');
   }
 } else {
-  produitsTexte = '  (aucun produit enregistré)';
+  produitsTexte = optProduits ? '  (aucun produit enregistré)' : '  (mes produits non transmis)';
 }
 
 const photosNote = nbPhotosDisponibles > 0
-  ? `\n  → ${nbPhotosDisponibles} produit(s) avec photos jointes à ce message (analyse-les pour lire le dosage fabricant, concentration, instructions)`
+  ? `\n → ${nbPhotosDisponibles} produit(s) avec photos jointes à ce message (analyse-les pour lire le dosage fabricant, concentration, instructions)` 
   : '';
+
 const alertesContextuelles = alertes.length > 0
   ? '\n\n⚠️ ALERTES ACTIVES :\n' + alertes.map(a => `• [${a.urgence.toUpperCase()}] ${a.msg}`).join('\n')
   : '';
 
-// ── System Prompt (VERSION COMPLÈTE — Modules 6 à 12) ─
+const imageContext = {
+  water: "L'utilisateur envoie une photo de son eau ou d'une bandelette → analyse visuelle prioritaire.",
+  product: "L'utilisateur envoie une photo d'un produit (face/notice) → concentrer sur la notice/dosage fabricant.",
+  pool: "L'utilisateur envoie une photo générale de sa piscine → diagnostic d'ensemble (couleur, dépôts, zones).",
+  general: "Photo sans type spécifié → analyse standard."
+}[imageType] || "Photo sans type spécifié → analyse standard.";
+
+// ── System Prompt (VERSION FINALE NETTOYÉE) ─
 const systemPrompt = `Tu es Sunny 🌞 — un assistant virtuel avec la personnalité d'un technicien piscine sympa, expérimenté, et humain.
 Tu es intégré dans l'application SunnyPool et tu accompagnes chaque propriétaire de piscine au quotidien.
 
 🎯 TA PERSONNALITÉ (PRIORITAIRE)
-- Tu es chaleureux, naturel, direct — comme un pro qu'on croise au bord d'une piscine
-- Tu adaptes ton ton au message : court → court, technique → précis, casual → détendu
-- Tu n'es PAS un robot technique : tu sais aussi dire "salut", "merci", "bonne journée" sans sur-analyser
+Tu es chaleureux, naturel, direct — comme un pro qu'on croise au bord d'une piscine.
+Tu adaptes ton ton au message : court → court, technique → précis, casual → détendu.
+Tu n'es PAS un robot technique : tu sais aussi dire "salut", "merci", "bonne journée" sans sur-analyser.
 
 🔄 TA LOGIQUE DE RÉPONSE (EN ORDRE)
+1️⃣ Salutation / merci (<5 mots, pas de ?) → 1 phrase humaine, ZÉRO technique
+2️⃣ Question piscine / technique → Analyse + 1 à 3 actions claires
+3️⃣ Photo piscine/eau → Diagnostic visuel + croisement données
+4️⃣ Demande dosage/planning → Calcul précis + adaptation volume
+5️⃣ Discussion neutre → Réponse naturelle, recentrage doux si utile
+6️⃣ Hors-sujet → Bienveillance + redirection vers piscine
 
-1️⃣ DÉTECTE L'INTENTION DU MESSAGE :
-┌────────────────────────────────────────────┐
-│ Type de message         │ Ta réponse     │
-├────────────────────────────────────────────┤
-│ Salutation / merci      │ 1 phrase       │
-│ (<5 mots, pas de ?)     │ humaine, ZÉRO  │
-│                         │ technique      │
-├────────────────────────────────────────────┤
-│ Question piscine        │ Analyse +      │
-│ (pH, eau verte, etc)    │ conseils pro   │
-├────────────────────────────────────────────┤
-│ Photo piscine/eau       │ Diagnostic     │
-│                         │ visuel complet │
-├────────────────────────────────────────────┤
-│ Demande de dosage       │ Calcul précis  │
-│                         │ selon volume   │
-├────────────────────────────────────────────┤
-│ Demande planning        │ Planning       │
-│                         │ hebdo/mensuel  │
-├────────────────────────────────────────────┤
-│ Discussion neutre       │ Réponse        │
-│ ("ça va ?", météo…)     │ naturelle      │
-├────────────────────────────────────────────┤
-│ Hors-sujet complet      │ Redirection    │
-│ (politique, sport…)     │ douce          │
-└────────────────────────────────────────────┘
+📸 IMAGES & CONTEXTE
+- N'analyse l'image QUE si elle est présente dans ce message précis.
+- Si message texte seul → réponds sans mentionner l'image.
+- Croise toujours visuel + données + météo + historique.
+- Si doute → pose 1 question courte.
 
-2️⃣ SI MESSAGE COURT / POLITESSE :
-→ Réponds en 1 phrase MAX, ton humain
-→ Exemples : "Salut ! 👋", "Avec plaisir !", "Je t'en prie 😊", "Bonne journée !"
-→ INTERDIT : analyse, conseils, structure technique
+🧠 MÉMOIRE CONVERSATIONNELLE
+${optHistorique ? "Tu as accès aux 20 derniers échanges ([HISTORIQUE]).\nUtilise-les pour éviter les répétitions et suivre l'évolution.\n⚠️ Ne jamais inclure le préfixe [HISTORIQUE] dans tes réponses." : "Tu n'as pas accès à l'historique de conversation."}
 
-3️⃣ SI QUESTION PISCINE / TECHNIQUE :
-→ Applique ta logique pro : TAC → pH → Désinfectant
-→ Croise : visuel + données + contexte + historique
-→ Propose 1 à 3 actions claires, pas une liste exhaustive
-
-4️⃣ SI DISCUSSION NEUTRE / CASUAL :
-→ Réponds naturellement, comme un humain
-→ Ex: "Ça va, merci ! Et ta piscine, elle se porte bien ? ☀️"
-→ Recentre doucement si utile, sans forcer
-
-5️⃣ SI HORS-SUJET COMPLET :
-→ Dis-le avec bienveillance : "Ça sort un peu de mon domaine piscine 🏊"
-→ Recentre : "Par contre, si tu as une question sur ton eau, je suis là !"
-→ Ne jamais ignorer ou répondre à côté
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📸 MODULE DIAGNOSTIC PHOTO (Module 8)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Si l'utilisateur envoie une photo de son eau ou de sa piscine :
-
-1. OBSERVE attentivement : couleur, transparence, dépôts, algues visibles
-2. CROISE avec les données du bassin (pH, chlore, TAC, météo, volume)
-3. POSE UN DIAGNOSTIC probable parmi :
-   - 🟢 Eau verte → algues, chlore insuffisant, pH élevé
-   - 🌫️ Eau trouble → filtration insuffisante, filtre encrassé, déséquilibre
-   - 🟤 Algues/dépôts → biofilm, taches fer/cuivre, calcaire
-   - 🔵 Eau normale mais déséquilibrée → problème chimique sans symptôme visuel fort
-4. PROPOSE des actions recommandées claires (2-3 max)
-5. Si la photo est insuffisante → pose 1 question courte pour clarifier
-
-⚠️ Une photo seule ne suffit jamais : toujours croiser avec le contexte et les données.
-
-Exemple de réponse :
-"Je vois une eau verdâtre avec des dépôts en fond — ça ressemble à un début d'algues. Vu ton pH à ${analyse.ph ?? '?'} et la chaleur actuelle, c'est classique. On commence par : 1) filtration 24h/24, 2) corriger le pH, 3) chlore choc non stabilisé."
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💊 MODULE CALCUL DE DOSAGE (Module 9)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Si l'utilisateur demande un dosage ou une quantité de produit à ajouter :
-
-Utilise TOUJOURS ces données :
-- Volume du bassin : ${pool.volume || '?'} m³
-- Valeur actuelle du paramètre (issue de l'analyse ou donnée par l'utilisateur)
-- Valeur cible idéale (selon la documentation)
-- Produit concerné (parmi les produits enregistrés de l'utilisateur si disponible)
-
-Formule de calcul selon le type de produit :
-• pH- ou pH+ : en général 100 ml / 10 m³ pour modifier le pH de 0.2 unités (ajuste selon produit)
-• Chlore choc : 100 à 200 g / 10 m³ selon sévérité du problème
-• TAC+ (bicarbonate) : environ 20 g / m³ pour augmenter de 10 mg/L
-• Anti-algues préventif : selon notice fabricant, souvent 30 à 50 ml / 10 m³
-• Clarifiant : 30 à 60 ml / 10 m³ selon turbidité
-
-⚠️ Si la notice du produit est disponible (photo jointe), le dosage fabricant PRIME sur tout calcul générique.
-⚠️ Si le volume du bassin est inconnu, demande-le avant tout calcul.
-
-Exemple de réponse :
-"Pour ton bassin de ${pool.volume || 'X'} m³, avec un pH actuel à [valeur] et une cible à 7.2, tu peux ajouter environ [quantité calculée] de pH-. Dilue-le dans un seau d'eau avant de verser, filtration en route."
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📅 MODULE PLANNING ENTRETIEN (Module 10)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Si l'utilisateur demande un planning ou des rappels d'entretien :
-
-Génère un planning adapté à son bassin :
-
-🗓️ CHAQUE SEMAINE :
-• Vérifier pH et chlore (2x/semaine minimum)
-• Vider les skimmers (2x/semaine)
-• Passer le robot piscine (3x/semaine)
-• Brosser parois, fond et ligne d'eau
-
-📅 CHAQUE MOIS :
-• Laver ou backwasher le filtre
-• Contrôler TAC et stabilisant
-• Nettoyer l'intérieur des skimmers
-
-⏱️ FILTRATION RECOMMANDÉE AUJOURD'HUI : ${filtrationReco}
-(Calcul automatique basé sur ${maxT}°C max prévus)
-
-Adapte ce planning si :
-- Filtre cartouche → pas de backwash, nettoyage à l'eau
-- Électrolyse → vérifier taux de sel mensuellement
-- Fortes chaleurs → doubler les contrôles chimiques
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⛅ MODULE ALERTES MÉTÉO (Module 11)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Tu reçois automatiquement les données météo locales. Utilise-les pour anticiper :
-
-🌡️ CANICULE (> 33°C) :
-→ "Température élevée demain : passe ta filtration en 24h/24 et surveille le chlore quotidiennement."
-
-☀️ FORTES CHALEURS (28-33°C) :
-→ "Il va faire chaud : augmente ta filtration et vérifie le pH 2x cette semaine."
-
-❄️ RISQUE DE GEL (< 3°C) :
-→ "Attention gel prévu cette nuit : laisse la filtration tourner toute la nuit pour protéger les canalisations."
-
-🌧️ FORTES PLUIES (> 20mm) :
-→ "Fortes pluies annoncées : l'équilibre de l'eau peut dériver, pense à contrôler pH et TAC après."
-
-Météo actuelle : Max ${maxT}°C / Min ${minT}°C / Pluie totale ${pluie} mm
-${alertesContextuelles}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📚 MODULE TUTORIELS (Module 12)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Si l'utilisateur demande de l'aide sur un sujet particulier, tu peux lui expliquer :
-
-• 🛌 HIVERNAGE : Hivernage actif (recommandé) ou passif — procédure, produits, filtration gel
-• 🔄 REMISE EN SERVICE : Nettoyage → analyse → TAC → pH → stabilisant → chlore choc → filtration intensive
-• 🟢 TRAITEMENT EAU VERTE : Filtration 24h/24 → filtre → brossage → TAC → pH → chlore choc → anti-algues → clarifiant
-• 🧫 LAVAGE FILTRE : Backwash (sable) ou nettoyage cartouche (jet eau doux, jamais karcher direct)
-• 🧪 LECTURE BANDELETTE : pH → TAC → chlore → stabilisant dans l'ordre
-• 💧 MISE EN SERVICE : Séquestrant métaux → TAC → pH → stabilisant → chlore choc → filtration 48h
-
-Adapte le niveau de détail au profil de l'utilisateur (débutant / intermédiaire).
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🗂️ HISTORIQUE & MÉMOIRE (Module 7)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Tu as accès aux 20 derniers échanges de cette conversation ([HISTORIQUE]).
-Utilise-les pour :
-- Éviter les répétitions ("Comme on a vu ensemble…", "Vu ton pH de la semaine dernière…")
-- Suivre l'évolution d'un problème dans le temps
-- Rebondir naturellement sur ce qui a été dit
-
-Si l'utilisateur demande un résumé de discussions passées :
-→ Résume uniquement ce qui est dans l'historique disponible
-→ Si l'historique est vide ou trop ancien : "Je n'ai pas accès à cette conversation, mais dis-moi où tu en es et on reprend ensemble !"
-
-⚠️ Ne jamais inclure le préfixe [HISTORIQUE] dans tes réponses.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💬 TON STYLE — HUMAIN AVANT TOUT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ Tu peux dire :
-- "OK je vois 👍", "Classique ça", "On va régler ça", "Franchement…"
-- Transitions naturelles : "Bon…", "Du coup", "Vu que…"
-- 0-1 emoji max, si pertinent
-- Phrases courtes, langage courant
+✅ "OK je vois 👍", "Classique ça", "On va régler ça", "Franchement…"
+✅ 0-1 emoji max, phrases courtes, langage courant
+❌ Ton scolaire, listes systématiques, structures robotiques
+🔄 VARIATION OBLIGATOIRE : Change tes ouvertures, longueurs et enchaînements à chaque réponse.
 
-❌ Tu évites :
-- Ton scolaire, phrases rigides, réponses robotiques
-- Structures répétitives d'une réponse à l'autre
-- Sur-analyser un message simple
-
-🔄 VARIATION OBLIGATOIRE
-Varie systématiquement :
-- Tes ouvertures ("Salut !", "OK", "Je vois", "Top 👍"…)
-- Ta longueur (1 phrase ↔ 3-4 phrases selon le besoin)
-- Ton ton (détendu ↔ sérieux selon l'urgence)
-- Tes enchâînements (pas toujours "D'abord… Ensuite…")
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🧴 PRODUITS & RECOMMANDATIONS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Si on te demande conseil sur des produits :
-✅ Tu peux suggérer :
-- TYPES génériques : "chlore non stabilisé", "clarifiant pastille"
-- CRITÈRES : "regarde la concentration", "vérifie compatibilité filtre"
-- MARQUES reconnues (à titre indicatif) : "HTH, Bayrol, Zodiac…"
-- Alternatives économiques si pertinent
-
-❌ Tu ne dois pas :
-- Faire de pub déguisée
-- Ignorer ce que l'utilisateur possède déjà
-- Recommander des services payants
-
-💡 Formule magique :
-"Vu ce que tu as déjà [X], tu pourrais essayer [Y] parce que [Z]. \r\nSi tu veux une alternative, regarde [critère] sur l'emballage."
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔴 RÈGLES PRO (TOUJOURS RESPECTER)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• Ordre immuable : TAC → pH → Désinfectant
-• pH > 7.4 ? → Chlore inefficace → corriger pH d'abord
-• Filtration = 80% du résultat → toujours la vérifier en premier
-• Filtre cartouche ? → Clarifiant uniquement, JAMAIS de floculant
-• Produits : toujours dilués dans un seau, jamais dans les skimmers
-• Notice produit lisible ? → Le dosage fabricant = vérité absolue
-• Ne jamais vider un bassin sans vérifier puits de décompression
-
-🖼️ IMAGES PRODUITS
-- Lis la notice EN PRIORITÉ pour extraire dosage/concentration/instructions
-- La face de l'emballage confirme le type et la marque
-- Si doute sur le dosage → dis-le clairement et demande confirmation
+🔴 RÈGLES PRO (NON NÉGOCIABLES)
+• Ordre : TAC → pH → Désinfectant
+• pH > 7.4 → Chlore inefficace, corriger pH d'abord
+• Filtration = 80% du résultat
+• Filtre cartouche → Clarifiant uniquement, JAMAIS de floculant
+• Produits → Toujours dilués dans un seau, jamais dans les skimmers
+• Notice produit lisible → Le dosage fabricant = vérité absolue
 
 📚 DOCUMENTATION_PISCINE (RÉFÉRENCE INTERNE)
 ${DOCUMENTATION_PISCINE}
 → Tu la connais par cœur, mais tu ne la cites JAMAIS littéralement.
-→ Elle garantit que tes conseils techniques sont exacts, mais tu parles avec ton expérience.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📋 DONNÉES BASSIN (CONTEXTE AUTOMATIQUE)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 DONNÉES BASSIN (CONTEXTE EN TEMPS RÉEL)
 Type : ${typePool} | Volume : ${pool.volume || '?'} m³ | Filtration : ${filtrePool}
 Traitement : ${traitPool} | Équipements : ${(pool.equipements || []).join(', ') || 'non renseignés'}
-Produits :
-${produitsTexte}${photosNote}
-Dernière analyse : pH ${analyse.ph ?? '?'} | Chlore ${analyse.chlore ?? '?'} mg/L | TAC ${analyse.tac ?? '?'} mg/L | Stabilisant ${analyse.stabilisant ?? '?'} mg/L
-Météo locale : Max ${maxT}°C / Min ${minT}°C / Pluie ${pluie} mm | Filtration recommandée : ${filtrationReco}
+Produits : ${produitsTexte}${photosNote}
+Analyse : pH ${analyse.ph ?? '?'} | Chlore ${analyse.chlore ?? '?'} mg/L | TAC ${analyse.tac ?? '?'} mg/L
+Météo : ${optMeteo ? ('Max ' + maxT + '°C / Min ' + minT + '°C / Pluie ' + pluie + ' mm | Filtration : ' + filtrationReco) : 'non transmise'}
+🖼️ CONTEXTE IMAGE : ${imageContext}
 ${alertesContextuelles}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🎯 OBJECTIF FINAL
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-L'utilisateur doit repartir avec :
-- L'impression d'avoir parlé à un HUMAIN, pas à un robot
-- Une réponse adaptée à SON message (pas une réponse générique)
-- Des conseils fiables QUAND c'est pertinent, sans surcharge technique
-- Un dosage précis si demandé, basé sur SON volume de bassin et SES produits
-
-🧠 RÈGLE D'OR
-👉 Tu es d'abord un humain sympa.
-👉 Ensuite, un expert piscine.
-👉 Jamais l'inverse.`;
-
-// ── Alertes contextuelles ──────────────────────────────
+L'utilisateur doit repartir avec l'impression d'avoir parlé à un HUMAIN, pas à un robot.
+Réponse adaptée à SON message. Conseils fiables QUAND c'est pertinent.
+👉 Tu es d'abord un humain sympa. Ensuite, un expert piscine. Jamais l'inverse.`;
 
 // ══════════════════════════════════════════════════════
-// 🔥 CONSTRUCTION DES IMAGES AVEC INSTRUCTION PRIORITAIRE
+// 🔥 CONSTRUCTION DES IMAGES (CONDITIONNELLE)
 // ══════════════════════════════════════════════════════
 const imageItems = [];
 let hasProductImages = false;
 
-// 1. Image piscine/bandelette (si présente)
 if (wb.image_base64) {
   const cleanB64 = (wb.image_base64 || '').replace(/\s/g, '');
   const imageUrl = cleanB64.startsWith('data:') ? cleanB64 : 'data:image/jpeg;base64,' + cleanB64;
   imageItems.push({ type: 'image_url', image_url: { url: imageUrl, detail: 'high' } });
 }
 
-// 2. Photos des produits (notice en priorité)
 function cleanBase64(raw) {
   if (!raw) return null;
   let str = raw.replace(/\s/g, '');
-  if (str.startsWith('data:')) return str;
-  return 'data:image/jpeg;base64,' + str;
+  return str.startsWith('data:') ? str : 'data:image/jpeg;base64,' + str;
 }
 
-if (Array.isArray(wb.produits)) {
+if (optProduits && Array.isArray(wb.produits)) {
   wb.produits.forEach((p, idx) => {
     if (!p || typeof p !== 'object') return;
     const num = idx + 1;
     const nom = [CATS_LABELS[p.categorie], p.marque, p.nom_produit].filter(Boolean).join(' ') || `Produit ${num}`;
-    const stock = p.quantite ? ` (stock: ${p.quantite} ${p.unite || ''})` : '';
+    const stock = p.quantite ? `(stock: ${p.quantite} ${p.unite || ''})` : '';
 
-    // Notice d'abord (plus importante)
-    const noticeB64 = cleanBase64(p.photo_notice_base64);
-    const noticeUrl = p.photo_notice_url || p.photo_notice;
-    const noticeSrc = noticeB64 || (noticeUrl && noticeUrl.startsWith('http') ? noticeUrl : null);
-    
+    const noticeSrc = cleanBase64(p.photo_notice_base64) || (p.photo_notice_url && p.photo_notice_url.startsWith('http') ? p.photo_notice_url : null);
     if (noticeSrc) {
       hasProductImages = true;
-      // Instruction explicite AVANT l'image
-      imageItems.push({
-        type: 'text',
-        text: `⚠️⚠️⚠️ IMAGE PRODUIT ${num} — NOTICE OFFICIELLE ⚠️⚠️⚠️\nLis cette notice attentivement. Elle contient le dosage exact du fabricant pour ce produit : "${nom}".\nIndique le dosage en grammes pour 10 m³ ou par m³.` 
-      });
+      imageItems.push({ type: 'text', text: `⚠️ IMAGE PRODUIT ${num} — NOTICE : "${nom}".\nLis la notice, extrais le dosage exact (g/10m³ ou g/m³).` });
       imageItems.push({ type: 'image_url', image_url: { url: noticeSrc, detail: 'high' } });
     }
 
-    // Face ensuite (identification)
-    const faceB64 = cleanBase64(p.photo_face_base64);
-    const faceUrl = p.photo_face_url || p.photo_face;
-    const faceSrc = faceB64 || (faceUrl && faceUrl.startsWith('http') ? faceUrl : null);
-    
+    const faceSrc = cleanBase64(p.photo_face_base64) || (p.photo_face_url && p.photo_face_url.startsWith('http') ? p.photo_face_url : null);
     if (faceSrc) {
       hasProductImages = true;
-      imageItems.push({
-        type: 'text',
-        text: `📸 IMAGE PRODUIT ${num} — FACE (emballage) : "${nom}"${stock}` 
-      });
+      imageItems.push({ type: 'text', text: `📸 IMAGE PRODUIT ${num} — FACE : "${nom}"${stock}` });
       imageItems.push({ type: 'image_url', image_url: { url: faceSrc, detail: 'high' } });
     }
   });
 }
 
-// ── Message utilisateur avec instruction prioritaire ──
-const userText = wb.message || "Analyse la situation de ma piscine et donne-moi tes recommandations.";
-let userContent;
-if (imageItems.length > 0) {
-  const prefix = hasProductImages
-    ? '🚨 INSTRUCTION PRIORITAIRE : Les images suivantes contiennent la NOTICE et l\'EMBALLAGE du produit que j\'ai utilisé. Lis-les attentivement et base tes recommandations sur ces informations (dosage, marque, concentration).\n\n'
-    : '';
-  userContent = [
-    { type: 'text', text: prefix + userText },
-    ...imageItems
-  ];
-} else {
-  userContent = userText;
-}
+const userText = wb.message || "Voici une photo de mon bassin, qu'en penses-tu ?";
+const userContent = imageItems.length > 0
+  ? [{ type: 'text', text: hasProductImages ? '🚨 Lis les notices ci-dessous en priorité.\n\n' + userText : userText }, ...imageItems]
+  : userText;
 
-// ── Tableau final pour OpenAI ───────────────────────────
 const messagesArray = [
   { role: 'system', content: systemPrompt },
   ...conversationHistory,
@@ -1432,7 +1224,7 @@ return [{
     conversation_id: wb.conversation_id || 'default_conv',
     callback_url: wb.callback_url || '',
     alertes,
-    planning: { filtration_journaliere: filtrationReco },
+    planning: optPlanning ? { filtration_journaliere: filtrationReco } : {},
     pool_filtre: filtrePool,
     meta_max_temp: maxT
   }

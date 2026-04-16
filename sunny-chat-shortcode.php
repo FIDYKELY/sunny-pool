@@ -355,6 +355,48 @@ function sunny_chat_shortcode() {
             cursor: pointer; display: flex; align-items: center; justify-content: center;
         }
 
+        /* Badge type d'image */
+        #image-type-label {
+            position: absolute;
+            top: 4px;
+            left: 8px;
+            background: rgba(0,0,0,0.7);
+            color: #ffd700;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.75em;
+            pointer-events: none;
+            display: inline-block;
+        }
+
+        /* Panneau options données */
+        #sunny-data-options {
+            background: rgba(212,175,55,0.06);
+            border: 1px solid rgba(212,175,55,0.25);
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin: 0 20px 12px;
+            display: none;
+        }
+        #sunny-data-options h4 {
+            color: #d4af37;
+            margin: 0 0 10px;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        #sunny-data-options label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #ccc;
+            cursor: pointer;
+            user-select: none;
+        }
+        #sunny-data-options input[type="checkbox"] {
+            accent-color: #d4af37;
+        }
+
         /* Input message */
         .sunny-input-row { display: flex; gap: 10px; align-items: flex-end; }
         .sunny-chat-input-area textarea {
@@ -465,9 +507,29 @@ function sunny_chat_shortcode() {
             </div>
         </div>
 
+        <!-- Panneau options données (nouveau) -->
+        <div id="sunny-data-options">
+            <h4>⚙️ Données à inclure</h4>
+            <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:8px; font-size:0.9em;">
+                <label><input type="checkbox" id="opt-meteo" checked> 🌤️ Météo locale</label>
+                <label><input type="checkbox" id="opt-historique" checked> 📜 Historique</label>
+                <label><input type="checkbox" id="opt-produits" > 🧴 Mes produits</label>
+                <label><input type="checkbox" id="opt-alertes" checked> ⚠️ Alertes auto</label>
+                <label><input type="checkbox" id="opt-planning"> 📅 Planning</label>
+                <label><input type="checkbox" id="opt-coordonnees"> 📍 Coordonnées GPS</label>
+            </div>
+        </div>
+
         <!-- Preview image -->
         <div id="image-preview-zone" class="image-preview-zone" style="margin: 0 20px 4px;">
             <img id="image-preview" src="" alt="Aperçu">
+            <span id="image-type-label"></span>
+            <select id="sunny-image-type-select" style="display:none;">
+                <option value="general" selected>general</option>
+                <option value="water">water</option>
+                <option value="product">product</option>
+                <option value="pool">pool</option>
+            </select>
             <button class="remove-img" onclick="sunnyRemoveImage()" title="Retirer l'image">✕</button>
         </div>
 
@@ -480,15 +542,33 @@ function sunny_chat_shortcode() {
 
         <div class="sunny-chat-input-area">
             <div class="sunny-toolbar">
-                <label class="sunny-tool-btn" title="Envoyez une bandelette, un écran de testeur ou une photo de votre eau — Sunny extraira les valeurs automatiquement">
-                    📸 Bandelette / Photo
-                    <input type="file" id="sunny-image-input" accept="image/*" capture="environment" onchange="sunnyLoadImage(this)">
+                <!-- Images -->
+                <label class="sunny-tool-btn" title="Photo de l'eau, bandelette ou testeur">
+                    💧 Eau / Bandelette
+                    <input type="file" id="sunny-image-water" accept="image/*" capture="environment"
+                        onchange="sunnyLoadImage(this, 'water')">
                 </label>
+
+                <label class="sunny-tool-btn" title="Photo d'un produit (face ou notice)">
+                    🧴 Produit
+                    <input type="file" id="sunny-image-product" accept="image/*" capture="environment"
+                        onchange="sunnyLoadImage(this, 'product')">
+                </label>
+
+                <label class="sunny-tool-btn" title="Photo générale de la piscine">
+                    🏊 Piscine
+                    <input type="file" id="sunny-image-pool" accept="image/*" capture="environment"
+                        onchange="sunnyLoadImage(this, 'pool')">
+                </label>
+
                 <button class="sunny-tool-btn" id="toggle-analyse-btn" onclick="sunnyToggleAnalyse()">
                     📊 Saisir mesures
                 </button>
                 <button class="sunny-tool-btn" id="toggle-products-btn" onclick="sunnyToggleProducts()">
                     🧴 Mes produits
+                </button>
+                <button class="sunny-tool-btn" id="toggle-data-btn" onclick="sunnyToggleDataOptions()">
+                    ⚙️ Options
                 </button>
                 <button class="sunny-tool-btn" onclick="sunnyQuickSend('Mon eau est verte, que faire ?')">🟢 Eau verte</button>
                 <button class="sunny-tool-btn" onclick="sunnyQuickSend('Mon pH est élevé, que faire ?')">⚗️ pH élevé</button>
@@ -522,6 +602,7 @@ function sunny_chat_shortcode() {
 
             let currentPoolId  = <?php echo $selected_pool_id; ?>;
             let imageBase64    = null;
+            let currentImageType = 'general'; // 'water' | 'product' | 'pool' | 'general'
             let analyseOpen    = false;
             let productsOpen   = false;
             let isLoading      = false;
@@ -627,7 +708,7 @@ function sunny_chat_shortcode() {
                 sunnySend();
             };
 
-            window.sunnyLoadImage = function(input) {
+            window.sunnyLoadImage = function(input, type) {
                 const file = input.files[0];
                 if (!file) return;
                 if (file.size > 4 * 1024 * 1024) {
@@ -640,6 +721,20 @@ function sunny_chat_shortcode() {
                     // On garde le dataURL complet (avec préfixe "data:image/...;base64,")
                     // Le nettoyage pour n8n se fait dans sendToSunny
                     imageBase64 = e.target.result;
+                    currentImageType = type || 'general';
+
+                    const sel = document.getElementById('sunny-image-type-select');
+                    if (sel) sel.value = currentImageType;
+
+                    const badge = document.getElementById('image-type-label');
+                    const labelMap = {
+                        'water': '💧 Eau',
+                        'product': '🧴 Produit',
+                        'pool': '🏊 Piscine',
+                        'general': ''
+                    };
+                    if (badge) badge.textContent = labelMap[currentImageType] || '';
+
                     document.getElementById('image-preview').src = imageBase64;
                     document.getElementById('image-preview-zone').style.display = 'block';
                     console.log('[Sunny] Image chargée :', Math.round(imageBase64.length * 0.75 / 1024) + ' Ko');
@@ -649,10 +744,47 @@ function sunny_chat_shortcode() {
 
             window.sunnyRemoveImage = function() {
                 imageBase64 = null;
+                currentImageType = 'general';
+                const sel = document.getElementById('sunny-image-type-select');
+                if (sel) sel.value = 'general';
+                const badge = document.getElementById('image-type-label');
+                if (badge) badge.textContent = '';
+
                 document.getElementById('image-preview-zone').style.display = 'none';
                 document.getElementById('image-preview').src = '';
-                document.getElementById('sunny-image-input').value = '';
+                ['sunny-image-water', 'sunny-image-product', 'sunny-image-pool'].forEach(function(id) {
+                    const el = document.getElementById(id);
+                    if (el) el.value = '';
+                });
             };
+
+            window.sunnyToggleDataOptions = function() {
+                const panel = document.getElementById('sunny-data-options');
+                const btn = document.getElementById('toggle-data-btn');
+                if (!panel || !btn) return;
+
+                const isOpen = panel.style.display === 'block' || panel.classList.contains('open');
+                panel.style.display = isOpen ? 'none' : 'block';
+                btn.classList.toggle('active', !isOpen);
+            };
+
+            function getDataOptions() {
+                const elMeteo = document.getElementById('opt-meteo');
+                const elHist  = document.getElementById('opt-historique');
+                const elProd  = document.getElementById('opt-produits');
+                const elAler  = document.getElementById('opt-alertes');
+                const elPlan  = document.getElementById('opt-planning');
+                const elGps   = document.getElementById('opt-coordonnees');
+
+                return {
+                    meteo: elMeteo ? elMeteo.checked : true,
+                    historique: elHist ? elHist.checked : true,
+                    produits: elProd ? elProd.checked : true,
+                    alertes: elAler ? elAler.checked : true,
+                    planning: elPlan ? elPlan.checked : false,
+                    coordonnees: elGps ? elGps.checked : false
+                };
+            }
 
             window.sunnyToggleAnalyse = function() {
                 analyseOpen = !analyseOpen;
@@ -946,7 +1078,9 @@ function sunny_chat_shortcode() {
                     message:         message,
                     pool_id:         currentPoolId,
                     image_base64:    imagePure,       // base64 pur ou null
+                    image_type:      imageBase64 ? (currentImageType || 'general') : 'general',
                     analyse:         (Object.keys(analyse).length > 0) ? analyse : null,
+                    data_options:    getDataOptions(),
                     conversation_id: conversationId,
                 };
 
