@@ -26,12 +26,14 @@ const optPlanning = !!dataOptions.planning; // default: false
 const meteoData = $input.first().json || {};
 const daily = meteoData.daily || {};
 
+// Utiliser UNIQUEMENT les données du jour actuel (index 0), pas le max de toute la période
 const maxT = Array.isArray(daily.temperature_2m_max) && daily.temperature_2m_max.length
-  ? Math.round(Math.max(...daily.temperature_2m_max)) : 25;
+  ? Math.round(daily.temperature_2m_max[0]) : 25;
 const minT = Array.isArray(daily.temperature_2m_min) && daily.temperature_2m_min.length
-  ? Math.round(Math.min(...daily.temperature_2m_min)) : 15;
+  ? Math.round(daily.temperature_2m_min[0]) : 15;
+// Pluie du jour actuel uniquement
 const pluie = Array.isArray(daily.precipitation_sum) && daily.precipitation_sum.length
-  ? daily.precipitation_sum.reduce((a, b) => a + b, 0).toFixed(0) : 0;
+  ? daily.precipitation_sum[0] : 0;
 
 const filtrationReco = maxT > 33 ? '24h/24' : (Math.round(maxT / 2) + 2) + 'h/jour';
 
