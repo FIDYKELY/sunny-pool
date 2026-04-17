@@ -217,6 +217,39 @@ function sunny_pool_register_api_routes() {
             ]
         ]
     ]);
+
+    // ============================================================
+    // GESTION DES CONVERSATIONS (THREADS) - Comme chat.qwen
+    // GET/POST /wp-json/sunny-pool/v1/chat/conversations
+    // DELETE /wp-json/sunny-pool/v1/chat/conversations/(?P<id>\d+)
+    // ============================================================
+    register_rest_route('sunny-pool/v1', '/chat/conversations', [
+        'methods'             => ['GET', 'POST'],
+        'callback'            => 'sunny_pool_api_manage_conversations',
+        'permission_callback' => 'sunny_pool_api_check_auth',
+        'args'                => [
+            'pool_id' => [
+                'validate_callback' => function($param, $request, $key) {
+                    return is_numeric($param);
+                },
+                'default' => 0,
+            ]
+        ]
+    ]);
+
+    register_rest_route('sunny-pool/v1', '/chat/conversations/(?P<id>\d+)', [
+        'methods'             => 'DELETE',
+        'callback'            => 'sunny_pool_api_delete_conversation',
+        'permission_callback' => 'sunny_pool_api_check_auth',
+        'args'                => [
+            'id' => [
+                'validate_callback' => function($param, $request, $key) {
+                    return is_numeric($param);
+                },
+                'required' => true,
+            ]
+        ]
+    ]);
 }
 
 // ========== FONCTIONS DE VÉRIFICATION DES PERMISSIONS ==========
@@ -1658,4 +1691,241 @@ function sunny_pool_format_pool_data($pool_id) {
             'products' => rest_url('sunny-pool/v1/pool/' . $pool_id . '/products')
         ]
     ];
+}
+/**
+ * ══════════════════════════════════════════════════════════════════
+ * GESTION DES CONVERSATIONS (THREADS)
+ * Permet de créer et lister les discussions comme chat.qwen
+ * ══════════════════════════════════════════════════════════════════
+ */
+
+/**
+ * Créer une nouvelle conversation
+ * POST /wp-json/sunny-pool/v1/chat/conversations
+ */
+function sunny_pool_api_create_conversation($request) {
+    global $wpdb;
+    $user_id = get_current_user_id();
+    $params  = $request->get_json_params();
+    
+    $pool_id = isset($params['pool_id']) ? intval($params['pool_id']) : 0;
+    $title   = isset($params['title']) ? sanitize_text_field($params['title']) : 'Nouvelle discussion';
+    
+    if (!$pool_id) {
+        // Prendre la première piscine de l'utilisateur
+        $pools = get_posts([
+            'post_type'      => 'piscine',
+            'posts_per_page' => 1,
+            'meta_query'     => [['key' => 'proprietaire', 'value' => $user_id, 'compare' => '=']]
+        ]);
+        if (!empty($pools)) {
+            $pool_id = $pools[0]->ID;
+        } else {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'Aucune piscine trouvée pour cet utilisateur.'
+            ], 400);
+        }
+    }
+    
+    $table_name = $wpdb->prefix . 'sunny_chat_conversations';
+    
+    $result = $wpdb->insert($table_name, [
+        'user_id'    => $user_id,
+        'pool_id'    => $pool_id,
+        'title'      => $title,
+        'status'     => 'active',
+        'created_at' => current_time('mysql')
+    ]);
+    
+    if ($result === false) {
+        return new WP_REST_Response([
+            'success' => false,
+            'message' => 'Erreur lors de la création de la conversation.'
+        ], 500);
+    }
+    
+    $conversation_id = $wpdb->insert_id;
+    
+    return new WP_REST_Response([
+        'success' => true,
+        'data'    => [
+            'id'         => $conversation_id,
+            'user_id'    => $user_id,
+            'pool_id'    => $pool_id,
+            'title'      => $title,
+            'status'     => 'active',
+            'created_at' => current_time('mysql')
+        ]
+    ], 201);
+}
+
+/**
+ * Récupérer la liste des conversations d'un utilisateur
+ * GET /wp-json/sunny-pool/v1/chat/conversations?pool_id=123
+ */
+function sunny_pool_api_get_conversations($request) {
+    global $wpdb;
+    $user_id = get_current_user_id();
+    $pool_id_param = $request->get_param('pool_id');
+    
+    // Récupérer toutes les piscines de l'utilisateur
+    $pools = get_posts([
+        'post_type'      => 'piscine',
+        'posts_per_page' => -1,
+        'meta_query'     => [['key' => 'proprietaire', 'value' => $user_id, 'compare' => '=']]
+    ]);
+    
+    if (empty($pools)) {
+        return new WP_REST_Response(['success' => true, 'count' => 0, 'data' => []], 200);
+    }
+    
+    // Si pool_id spécifié, vérifier qu'il appartient à l'utilisateur
+    $pool_id = 0;
+    if ($pool_id_param) {
+        foreach ($pools as $pool) {
+            if ($pool->ID == $pool_id_param) {
+                $pool_id = $pool->ID;
+                break;
+            }
+        }
+    }
+    
+    $table_name = $wpdb->prefix . 'sunny_chat_conversations';
+    
+    if ($pool_id > 0) {
+        $conversations = $wpdb->get_results($wpdb->prepare(
+            "SELECT c.*, 
+                    (SELECT COUNT(*) FROM {$wpdb->prefix}sunny_chat_messages m WHERE m.conversation_id = c.id) as message_count,
+                    (SELECT created_at FROM {$wpdb->prefix}sunny_chat_messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) as last_message_at
+             FROM $table_name c 
+             WHERE c.user_id = %d AND c.pool_id = %d 
+             ORDER BY c.created_at DESC",
+            $user_id, $pool_id
+        ), ARRAY_A);
+    } else {
+        $conversations = $wpdb->get_results($wpdb->prepare(
+            "SELECT c.*, 
+                    (SELECT COUNT(*) FROM {$wpdb->prefix}sunny_chat_messages m WHERE m.conversation_id = c.id) as message_count,
+                    (SELECT created_at FROM {$wpdb->prefix}sunny_chat_messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) as last_message_at
+             FROM $table_name c 
+             WHERE c.user_id = %d 
+             ORDER BY c.created_at DESC",
+            $user_id
+        ), ARRAY_A);
+    }
+    
+    return new WP_REST_Response([
+        'success' => true,
+        'count'   => count($conversations),
+        'data'    => $conversations
+    ], 200);
+}
+
+/**
+ * ══════════════════════════════════════════════════════════════════
+ * GESTION DES CONVERSATIONS - Fonctions unifiées
+ * ══════════════════════════════════════════════════════════════════
+ */
+
+/**
+ * Gère la liste et la création de conversations (GET/POST)
+ * POST /wp-json/sunny-pool/v1/chat/conversations
+ * GET /wp-json/sunny-pool/v1/chat/conversations?pool_id=123
+ */
+function sunny_pool_api_manage_conversations($request) {
+    global $wpdb;
+    $user_id = get_current_user_id();
+    
+    if ($request->get_method() === 'POST') {
+        // Création d'une nouvelle conversation
+        $params = $request->get_json_params();
+        $pool_id = isset($params['pool_id']) ? intval($params['pool_id']) : 0;
+        $title = isset($params['title']) ? sanitize_text_field($params['title']) : 'Nouvelle discussion';
+        
+        if (!$pool_id) {
+            // Prendre la première piscine de l'utilisateur
+            $pools = get_posts([
+                'post_type'      => 'piscine',
+                'posts_per_page' => 1,
+                'meta_query'     => [['key' => 'proprietaire', 'value' => $user_id, 'compare' => '=']]
+            ]);
+            if (!empty($pools)) {
+                $pool_id = $pools[0]->ID;
+            } else {
+                return new WP_REST_Response([
+                    'success' => false,
+                    'message' => 'Aucune piscine trouvée pour cet utilisateur.'
+                ], 400);
+            }
+        }
+        
+        $table_name = $wpdb->prefix . 'sunny_chat_conversations';
+        
+        $result = $wpdb->insert($table_name, [
+            'user_id'    => $user_id,
+            'pool_id'    => $pool_id,
+            'title'      => $title,
+            'status'     => 'active',
+            'created_at' => current_time('mysql')
+        ]);
+        
+        if ($result === false) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'Erreur lors de la création de la conversation.'
+            ], 500);
+        }
+        
+        $conversation_id = $wpdb->insert_id;
+        
+        return new WP_REST_Response([
+            'success' => true,
+            'data'    => [
+                'id'         => $conversation_id,
+                'user_id'    => $user_id,
+                'pool_id'    => $pool_id,
+                'title'      => $title,
+                'status'     => 'active',
+                'created_at' => current_time('mysql')
+            ]
+        ], 201);
+    }
+    
+    // GET - Liste des conversations
+    return sunny_pool_api_get_conversations($request);
+}
+
+/**
+ * Supprime une conversation et ses messages
+ * DELETE /wp-json/sunny-pool/v1/chat/conversations/{id}
+ */
+function sunny_pool_api_delete_conversation($request) {
+    global $wpdb;
+    $user_id = get_current_user_id();
+    $conversation_id = (int) $request->get_param('id');
+    
+    $table_conversations = $wpdb->prefix . 'sunny_chat_conversations';
+    $table_messages = $wpdb->prefix . 'sunny_chat_messages';
+    
+    // Vérifier que la conversation appartient à l'utilisateur
+    $conversation = $wpdb->get_row($wpdb->prepare(
+        "SELECT id FROM $table_conversations WHERE id = %d AND user_id = %d",
+        $conversation_id, $user_id
+    ));
+    
+    if (!$conversation) {
+        return new WP_REST_Response([
+            'success' => false,
+            'message' => 'Conversation non trouvée ou accès non autorisé.'
+        ], 404);
+    }
+    
+    // Supprimer les messages associés
+    $wpdb->delete($table_messages, ['conversation_id' => $conversation_id]);
+    
+    // Supprimer la conversation
+    $wpdb->delete($table_conversations, ['id' => $conversation_id]);
+    
+    return new WP_REST_Response(['success' => true], 200);
 }
