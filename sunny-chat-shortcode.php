@@ -1418,6 +1418,202 @@ function sunny_chat_shortcode() {
         0%, 80%, 100% { transform: scale(0.6); opacity: 0.5; }
         40% { transform: scale(1); opacity: 1; }
     }
+
+    /* ── DRAWER : DISCUSSIONS (THREADS) ────────────────── */
+    .sunny-threads-header-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 0 14px;
+    }
+
+    .sunny-new-thread-btn {
+        flex: 1;
+        padding: 10px 16px;
+        background: linear-gradient(135deg, #c9a43f 0%, var(--gold-light) 100%);
+        color: #1a1600;
+        border: none;
+        border-radius: var(--radius-sm);
+        font-size: 0.85em;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        transition: all var(--transition);
+        box-shadow: 0 2px 8px rgba(212,175,55,0.3);
+    }
+    .sunny-new-thread-btn:hover {
+        box-shadow: 0 4px 16px rgba(255,215,0,0.5);
+        transform: translateY(-1px);
+    }
+    .sunny-new-thread-btn:active {
+        transform: translateY(0);
+    }
+
+    .sunny-threads-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        max-height: 360px;
+        overflow-y: auto;
+    }
+
+    .sunny-thread-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 14px;
+        background: rgba(255,255,255,0.03);
+        border: 1px solid var(--gold-dim);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        transition: all var(--transition);
+        position: relative;
+        overflow: hidden;
+    }
+    .sunny-thread-item:hover {
+        background: var(--gold-dim);
+        border-color: var(--gold-border);
+    }
+    .sunny-thread-item.active {
+        background: linear-gradient(135deg, rgba(212,175,55,0.15), rgba(212,175,55,0.08));
+        border-color: var(--gold);
+        box-shadow: 0 0 12px rgba(212,175,55,0.15);
+    }
+    .sunny-thread-item.active::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 3px;
+        background: linear-gradient(180deg, var(--gold), var(--gold-light));
+        border-radius: 0 3px 3px 0;
+    }
+
+    .sunny-thread-icon {
+        font-size: 1.2em;
+        flex-shrink: 0;
+        opacity: 0.7;
+    }
+
+    .sunny-thread-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .sunny-thread-title {
+        color: var(--text-main);
+        font-size: 0.88em;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .sunny-thread-meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 3px;
+    }
+
+    .sunny-thread-date {
+        color: var(--text-muted);
+        font-size: 0.72em;
+    }
+
+    .sunny-thread-badge {
+        background: var(--gold-dim);
+        color: var(--gold);
+        padding: 1px 6px;
+        border-radius: 10px;
+        font-size: 0.68em;
+        font-weight: 700;
+    }
+
+    .sunny-thread-preview {
+        color: var(--text-muted);
+        font-size: 0.75em;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-top: 2px;
+    }
+
+    .sunny-thread-actions {
+        display: flex;
+        gap: 4px;
+        opacity: 0;
+        transition: opacity var(--transition);
+        flex-shrink: 0;
+    }
+    .sunny-thread-item:hover .sunny-thread-actions {
+        opacity: 1;
+    }
+
+    .sunny-thread-action-btn {
+        width: 26px; height: 26px;
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(255,255,255,0.05);
+        border: 1px solid var(--gold-dim);
+        border-radius: 6px;
+        color: var(--text-muted);
+        cursor: pointer;
+        font-size: 0.75em;
+        transition: all var(--transition);
+    }
+    .sunny-thread-action-btn:hover {
+        background: var(--gold-dim);
+        color: var(--gold-light);
+        border-color: var(--gold-border);
+    }
+    .sunny-thread-action-btn.delete:hover {
+        background: rgba(231,76,60,0.15);
+        color: #ff8585;
+        border-color: rgba(231,76,60,0.4);
+    }
+
+    .sunny-threads-empty {
+        text-align: center;
+        padding: 30px 20px;
+        color: var(--text-muted);
+    }
+    .sunny-threads-empty-icon {
+        font-size: 2.5em;
+        margin-bottom: 10px;
+        opacity: 0.5;
+    }
+    .sunny-threads-empty-text {
+        font-size: 0.88em;
+        line-height: 1.5;
+    }
+
+    /* Thread indicator in header */
+    .sunny-thread-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: var(--gold-dim);
+        border: 1px solid var(--gold-border);
+        border-radius: 12px;
+        padding: 2px 8px;
+        font-size: 0.72em;
+        color: var(--gold);
+        font-weight: 600;
+        max-width: 150px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        cursor: pointer;
+        transition: all var(--transition);
+    }
+    .sunny-thread-indicator:hover {
+        background: rgba(212,175,55,0.25);
+        border-color: var(--gold-light);
+    }
     </style>
 
     <!-- ===== HTML ===== -->
@@ -1432,6 +1628,7 @@ function sunny_chat_shortcode() {
             <h3>Sunny — Expert Piscine</h3>
             <div class="sunny-status-row">
                 <span class="sunny-status-dot"></span>
+                <span class="sunny-thread-indicator" id="sunny-thread-indicator" onclick="sunnyOpenDrawer('threads')" title="Discussion en cours">💬 Nouvelle discussion</span>
                 <?php if (count($pools) > 1) : ?>
                 <div class="sunny-pool-selector-wrap">
                     <select id="sunny-pool-selector">
@@ -1450,6 +1647,7 @@ function sunny_chat_shortcode() {
             </div>
         </div>
         <div class="sunny-header-actions">
+            <button class="sunny-hdr-btn" id="hdr-threads-btn" onclick="sunnyOpenDrawer('threads')" title="Mes discussions">💬</button>
             <button class="sunny-hdr-btn" id="hdr-analyse-btn" onclick="sunnyOpenDrawer('analyse')" title="Mesures d'eau">📊</button>
             <button class="sunny-hdr-btn" id="hdr-products-btn" onclick="sunnyOpenDrawer('products')" title="Mes produits">🧴</button>
             <button class="sunny-hdr-btn" id="hdr-options-btn" onclick="sunnyOpenDrawer('options')" title="Options">⚙️</button>
@@ -1609,6 +1807,28 @@ function sunny_chat_shortcode() {
         </div>
     </div>
 
+    <!-- ── DRAWER : DISCUSSIONS (THREADS) ── -->
+    <div class="sunny-drawer" id="drawer-threads">
+        <div class="sunny-drawer-handle"></div>
+        <div class="sunny-drawer-header">
+            <h4>💬 Mes discussions</h4>
+            <button class="sunny-drawer-close" onclick="sunnyCloseDrawer()">✕</button>
+        </div>
+        <div class="sunny-drawer-body">
+            <div class="sunny-threads-header-bar">
+                <button class="sunny-new-thread-btn" id="sunny-new-thread-btn" onclick="sunnyCreateThread()">
+                    ➕ Nouvelle discussion
+                </button>
+            </div>
+            <div id="sunny-threads-list" class="sunny-threads-list">
+                <div class="sunny-threads-empty">
+                    <div class="sunny-threads-empty-icon">💬</div>
+                    <div class="sunny-threads-empty-text">Aucune discussion.<br>Créez-en une pour commencer !</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     </div><!-- .sunny-chat-wrapper -->
 
     <!-- ===== JAVASCRIPT ===== -->
@@ -1622,8 +1842,10 @@ function sunny_chat_shortcode() {
             const NONCE        = '<?php echo $nonce; ?>';
             const HISTORY_URL  = '<?php echo esc_url(rest_url('sunny-pool/v1/chat/history')); ?>';
             const PRODUCTS_URL = '<?php echo esc_url(rest_url('sunny-pool/v1/pool')); ?>';
+            const THREADS_URL  = '<?php echo esc_url(rest_url('sunny-pool/v1/chat/threads')); ?>';
 
             let currentPoolId    = <?php echo $selected_pool_id; ?>;
+            let currentThreadId  = null;
             let imageBase64      = null;
             let currentImageType = 'general';
             let isLoading        = false;
@@ -1648,6 +1870,7 @@ function sunny_chat_shortcode() {
                 currentDrawer = name;
 
                 if (name === 'products') loadProducts();
+                if (name === 'threads') loadThreads();
             };
 
             window.sunnyCloseDrawer = function(silent) {
@@ -1681,18 +1904,26 @@ function sunny_chat_shortcode() {
             });
 
             // ── HISTORY ─────────────────────────────────────────────
-            function loadChatHistory(poolId) {
+            function loadChatHistory(poolId, threadId) {
                 if (!msgsContainer) return;
                 msgsContainer.innerHTML = '<div class="chat-bubble system">Chargement...</div>';
+
+                let url = `${HISTORY_URL}?pool_id=${poolId}`;
+                if (threadId) url += `&thread_id=${threadId}`;
+
                 $.ajax({
-                    url: `${HISTORY_URL}?pool_id=${poolId}`,
+                    url: url,
                     headers: { 'X-WP-Nonce': NONCE },
                     success: function(data) {
                         msgsContainer.innerHTML = '';
                         if (data.success && data.data.length > 0) {
                             data.data.reverse().forEach(function(msg) {
-                                appendBubble(msg.message, 'user');
-                                appendBubble(formatResponse(msg.response), 'sunny', true);
+                                if (msg.message && msg.message !== '[callback]') {
+                                    appendBubble(msg.message, 'user');
+                                }
+                                if (msg.response) {
+                                    appendBubble(formatResponse(msg.response), 'sunny', true);
+                                }
                             });
                         } else {
                             appendBubble('Bonjour ! Je suis Sunny, votre assistant piscine. Posez-moi vos questions 🏊', 'system');
@@ -1708,15 +1939,151 @@ function sunny_chat_shortcode() {
                 });
             }
 
+            // ── THREADS MANAGEMENT ────────────────────────────────────
+            function updateThreadIndicator(title) {
+                const indicator = document.getElementById('sunny-thread-indicator');
+                if (indicator) {
+                    indicator.textContent = '💬 ' + (title || 'Nouvelle discussion');
+                    indicator.title = title || 'Discussion en cours';
+                }
+            }
+
+            function loadThreads(andSelectFirst) {
+                const list = document.getElementById('sunny-threads-list');
+                if (!list) return;
+                list.innerHTML = '<div class="sunny-threads-empty"><div class="sunny-threads-empty-icon">⏳</div><div class="sunny-threads-empty-text">Chargement...</div></div>';
+
+                $.ajax({
+                    url: `${THREADS_URL}?pool_id=${currentPoolId}`,
+                    headers: { 'X-WP-Nonce': NONCE },
+                    success: function(data) {
+                        if (data.success && data.data.length > 0) {
+                            renderThreadsList(data.data);
+                            if (andSelectFirst || !currentThreadId) {
+                                switchToThread(data.data[0].id, data.data[0].title);
+                            }
+                        } else {
+                            list.innerHTML = '<div class="sunny-threads-empty"><div class="sunny-threads-empty-icon">💬</div><div class="sunny-threads-empty-text">Aucune discussion.<br>Créez-en une pour commencer !</div></div>';
+                            if (andSelectFirst) sunnyCreateThread();
+                        }
+                    },
+                    error: function() {
+                        list.innerHTML = '<div class="sunny-threads-empty"><div class="sunny-threads-empty-icon">❌</div><div class="sunny-threads-empty-text">Erreur de chargement</div></div>';
+                    }
+                });
+            }
+
+            function renderThreadsList(threads) {
+                const list = document.getElementById('sunny-threads-list');
+                if (!list) return;
+                let html = '';
+                threads.forEach(function(t) {
+                    const isActive = (currentThreadId === t.id);
+                    const dateStr = t.updated_at ? new Date(t.updated_at.replace(' ', 'T')).toLocaleDateString('fr-FR', { day:'numeric', month:'short' }) : '';
+                    const safeTitle = (t.title || 'Nouvelle discussion').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    html += '<div class="sunny-thread-item' + (isActive ? ' active' : '') + '" data-thread-id="' + t.id + '" onclick="sunnySelectThread(' + t.id + ', \'' + safeTitle + '\')">'
+                        + '<span class="sunny-thread-icon">' + (isActive ? '🟡' : '🗨️') + '</span>'
+                        + '<div class="sunny-thread-info">'
+                        + '<div class="sunny-thread-title">' + (t.title || 'Nouvelle discussion') + '</div>'
+                        + (t.last_message ? '<div class="sunny-thread-preview">' + t.last_message + '</div>' : '')
+                        + '<div class="sunny-thread-meta">'
+                        + '<span class="sunny-thread-date">' + dateStr + '</span>'
+                        + (t.message_count > 0 ? '<span class="sunny-thread-badge">' + t.message_count + ' msg</span>' : '')
+                        + '</div></div>'
+                        + '<div class="sunny-thread-actions" onclick="event.stopPropagation()">'
+                        + '<button class="sunny-thread-action-btn" onclick="sunnyRenameThread(' + t.id + ', \'' + safeTitle + '\')" title="Renommer">✏️</button>'
+                        + '<button class="sunny-thread-action-btn delete" onclick="sunnyDeleteThread(' + t.id + ')" title="Supprimer">🗑️</button>'
+                        + '</div></div>';
+                });
+                list.innerHTML = html;
+            }
+
+            function switchToThread(threadId, title) {
+                currentThreadId = threadId;
+                updateThreadIndicator(title);
+                loadChatHistory(currentPoolId, threadId);
+                const suggestBar = document.getElementById('sunny-suggestions');
+                if (suggestBar) suggestBar.style.display = '';
+            }
+
+            window.sunnySelectThread = function(threadId, title) {
+                switchToThread(threadId, title);
+                sunnyCloseDrawer();
+                document.querySelectorAll('.sunny-thread-item').forEach(function(el) {
+                    el.classList.toggle('active', parseInt(el.dataset.threadId) === threadId);
+                });
+            };
+
+            window.sunnyCreateThread = function() {
+                $.ajax({
+                    url: THREADS_URL,
+                    method: 'POST',
+                    contentType: 'application/json',
+                    headers: { 'X-WP-Nonce': NONCE },
+                    data: JSON.stringify({ pool_id: currentPoolId }),
+                    success: function(data) {
+                        if (data.success && data.data) {
+                            switchToThread(data.data.id, data.data.title);
+                            loadThreads();
+                            sunnyCloseDrawer();
+                            appendBubble('Nouvelle discussion créée ! Posez votre question 🏊', 'system');
+                        } else {
+                            alert(data.message || 'Erreur lors de la création');
+                        }
+                    },
+                    error: function() { alert('Erreur de connexion'); }
+                });
+            };
+
+            window.sunnyRenameThread = function(threadId, currentTitle) {
+                const newTitle = prompt('Renommer la discussion :', currentTitle || '');
+                if (!newTitle || newTitle.trim() === '' || newTitle === currentTitle) return;
+
+                $.ajax({
+                    url: THREADS_URL + '/' + threadId,
+                    method: 'PUT',
+                    contentType: 'application/json',
+                    headers: { 'X-WP-Nonce': NONCE },
+                    data: JSON.stringify({ title: newTitle.trim() }),
+                    success: function(data) {
+                        if (data.success) {
+                            loadThreads();
+                            if (currentThreadId === threadId) updateThreadIndicator(newTitle.trim());
+                        } else { alert(data.message || 'Erreur'); }
+                    },
+                    error: function() { alert('Erreur de connexion'); }
+                });
+            };
+
+            window.sunnyDeleteThread = function(threadId) {
+                if (!confirm('Êtes-vous sûr de vouloir supprimer cette discussion et tous ses messages ?')) return;
+
+                $.ajax({
+                    url: THREADS_URL + '/' + threadId,
+                    method: 'DELETE',
+                    headers: { 'X-WP-Nonce': NONCE },
+                    success: function(data) {
+                        if (data.success) {
+                            if (currentThreadId === threadId) currentThreadId = null;
+                            loadThreads(true);
+                            appendBubble('🗑️ Discussion supprimée', 'system');
+                        } else { alert(data.message || 'Erreur'); }
+                    },
+                    error: function() { alert('Erreur de connexion'); }
+                });
+            };
+
             // Pool selector change
             $(document).on('change', '#sunny-pool-selector', function() {
                 const newPoolId = parseInt($(this).val());
                 if (newPoolId === currentPoolId) return;
                 currentPoolId = newPoolId;
-                loadChatHistory(currentPoolId);
+                currentThreadId = null;
+                loadThreads(true);
             });
 
-            setTimeout(function() { loadChatHistory(currentPoolId); }, 100);
+            // Initial load : charger les threads puis sélectionner le plus récent
+            setTimeout(function() { loadThreads(true); }, 100);
 
             // ── PUBLIC FUNCTIONS ─────────────────────────────────────
             window.sunnySend = function() {
@@ -1934,6 +2301,12 @@ function sunny_chat_shortcode() {
             }
 
             function sendToSunny(message, imgB64, analyse) {
+                // SÉCURITÉ : Vérifier qu'une piscine est sélectionnée
+                if (!currentPoolId || currentPoolId === 0) {
+                    appendBubble('⚠️ Erreur : Veuillez sélectionner une piscine valide.', 'system');
+                    return;
+                }
+
                 isLoading = true;
                 document.getElementById('sunny-send').disabled = true;
 
@@ -1949,6 +2322,7 @@ function sunny_chat_shortcode() {
                 const payload = {
                     message,
                     pool_id:         currentPoolId,
+                    thread_id:       currentThreadId || 0,
                     image_base64:    imagePure,
                     image_type:      imgB64 ? (currentImageType || 'general') : 'general',
                     analyse:         Object.keys(analyse).length > 0 ? analyse : null,
@@ -1965,6 +2339,11 @@ function sunny_chat_shortcode() {
                     success: function(data) {
                         if (data.success) {
                             if (data.response && data.response !== 'pending') {
+                                // Update thread_id from server response (auto-création)
+                                if (data.thread_id && (!currentThreadId || currentThreadId !== data.thread_id)) {
+                                    currentThreadId = data.thread_id;
+                                    loadThreads();
+                                }
                                 removeTyping(typingEl);
                                 appendBubble(formatResponse(data.response), 'sunny', true);
                                 if (data.alertes && data.alertes.length) appendAlertes(data.alertes);
@@ -1974,6 +2353,12 @@ function sunny_chat_shortcode() {
                                 isLoading = false;
                                 document.getElementById('sunny-send').disabled = false;
                             } else {
+                                // Update thread_id même en mode pending (auto-création)
+                                if (data.thread_id && (!currentThreadId || currentThreadId !== data.thread_id)) {
+                                    currentThreadId = data.thread_id;
+                                    updateThreadIndicator(null); // Sera mis à jour automatiquement après auto-titre
+                                    loadThreads();
+                                }
                                 pollForResponse(data.conversation_id || conversationId, typingEl, 0);
                             }
                         } else {

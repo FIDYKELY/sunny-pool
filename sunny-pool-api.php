@@ -217,6 +217,65 @@ function sunny_pool_register_api_routes() {
             ]
         ]
     ]);
+
+    // ============================================================
+    // DISCUSSIONS (THREADS) — Plusieurs discussions par piscine
+    // ============================================================
+
+    // Liste des threads d'une piscine
+    // GET /wp-json/sunny-pool/v1/chat/threads?pool_id=123
+    register_rest_route('sunny-pool/v1', '/chat/threads', [
+        'methods'             => 'GET',
+        'callback'            => 'sunny_pool_api_list_threads',
+        'permission_callback' => 'sunny_pool_api_check_auth',
+        'args'                => [
+            'pool_id' => [
+                'validate_callback' => function($param) { return is_numeric($param); },
+                'required' => true,
+            ]
+        ]
+    ]);
+
+    // Créer un nouveau thread
+    // POST /wp-json/sunny-pool/v1/chat/threads
+    register_rest_route('sunny-pool/v1', '/chat/threads', [
+        'methods'             => 'POST',
+        'callback'            => 'sunny_pool_api_create_thread',
+        'permission_callback' => 'sunny_pool_api_check_auth',
+    ]);
+
+    // Renommer un thread
+    // PUT /wp-json/sunny-pool/v1/chat/threads/{id}
+    register_rest_route('sunny-pool/v1', '/chat/threads/(?P<thread_id>\d+)', [
+        'methods'             => 'PUT',
+        'callback'            => 'sunny_pool_api_rename_thread',
+        'permission_callback' => 'sunny_pool_api_check_auth',
+        'args'                => [
+            'thread_id' => ['validate_callback' => function($p) { return is_numeric($p); }],
+        ]
+    ]);
+
+    // Supprimer un thread (et ses messages)
+    // DELETE /wp-json/sunny-pool/v1/chat/threads/{id}
+    register_rest_route('sunny-pool/v1', '/chat/threads/(?P<thread_id>\d+)', [
+        'methods'             => 'DELETE',
+        'callback'            => 'sunny_pool_api_delete_thread',
+        'permission_callback' => 'sunny_pool_api_check_auth',
+        'args'                => [
+            'thread_id' => ['validate_callback' => function($p) { return is_numeric($p); }],
+        ]
+    ]);
+
+    // Messages d'un thread spécifique
+    // GET /wp-json/sunny-pool/v1/chat/threads/{id}/messages
+    register_rest_route('sunny-pool/v1', '/chat/threads/(?P<thread_id>\d+)/messages', [
+        'methods'             => 'GET',
+        'callback'            => 'sunny_pool_api_get_thread_messages',
+        'permission_callback' => 'sunny_pool_api_check_auth',
+        'args'                => [
+            'thread_id' => ['validate_callback' => function($p) { return is_numeric($p); }],
+        ]
+    ]);
 }
 
 // ========== FONCTIONS DE VÉRIFICATION DES PERMISSIONS ==========
@@ -756,6 +815,7 @@ function sunny_pool_api_chat($request) {
     $analyse_user    = $params['analyse']      ?? [];
     $conversation_id = sanitize_text_field($params['conversation_id'] ?? '');
     $image_type      = sanitize_text_field($params['image_type'] ?? 'general');
+    $thread_id_param = isset($params['thread_id']) ? intval($params['thread_id']) : 0;
 
     // ── 1. Options pour contrôler quelles données sont injectées dans n8n ─
     $data_options_in = $params['data_options'] ?? [];
@@ -802,42 +862,7 @@ function sunny_pool_api_chat($request) {
     $selected_pool_id = 0;
     $pool_post        = null;
     $produits_noms    = [];
-    $produits_data    = []; // Tableau complet des produits pour n8n
-
-    // ── Fonction helper : convertir URL image en base64 ─────────
-    function sunny_url_to_base64($url, $max_size_mb = 4) {
-        if (empty($url)) return '';
-
-        // Convertir URL en chemin local si c'est une URL du site
-        $upload_dir = wp_upload_dir();
-        $base_url = $upload_dir['baseurl'];
-
-        if (strpos($url, $base_url) === 0) {
-            $relative_path = substr($url, strlen($base_url));
-            $file_path = $upload_dir['basedir'] . $relative_path;
-        } else {
-            // Télécharger l'image si URL externe
-            $temp_file = download_url($url, 10);
-            if (is_wp_error($temp_file)) return '';
-            $file_path = $temp_file;
-        }
-
-        if (!file_exists($file_path)) return '';
-
-        $file_size = filesize($file_path);
-        if ($file_size > $max_size_mb * 1024 * 1024) return ''; // Trop grand
-
-        $file_data = file_get_contents($file_path);
-        $file_type = wp_check_filetype($file_path)['type'] ?: 'image/jpeg';
-
-        // Nettoyer le fichier temporaire si c'était une URL externe
-        if (isset($temp_file) && $temp_file === $file_path) {
-            @unlink($temp_file);
-        }
-
-        // Retourner base64 pur (sans préfixe data URI)
-        return base64_encode($file_data);
-    }
+    $produits_data    = []; 
 
     if (!empty($pools)) {
         if ($pool_id_param > 0) {
@@ -954,6 +979,31 @@ function sunny_pool_api_chat($request) {
     // ── callback_url que n8n utilisera pour renvoyer la réponse ──
     $callback_url = rest_url('sunny-pool/v1/chat-callback');
 
+    // ── Thread : auto-création si pas fourni ─────────────────────
+    $thread_table = $wpdb->prefix . 'sunny_chat_threads';
+    $thread_id = $thread_id_param;
+
+    if ($thread_id > 0) {
+        // Vérifier que le thread appartient bien à cet utilisateur + pool
+        $thread_exists = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM $thread_table WHERE id = %d AND user_id = %d AND pool_id = %d",
+            $thread_id, $user_id, $selected_pool_id
+        ));
+        if (!$thread_exists) $thread_id = 0; // Invalide → on va en créer un
+    }
+
+    if ($thread_id <= 0) {
+        // Créer un nouveau thread automatiquement
+        $wpdb->insert($thread_table, [
+            'user_id'    => $user_id,
+            'pool_id'    => $selected_pool_id,
+            'title'      => 'Nouvelle discussion',
+            'created_at' => current_time('mysql'),
+        ]);
+        $thread_id = (int) $wpdb->insert_id;
+        error_log('[Sunny Chat] Thread auto-créé id=' . $thread_id);
+    }
+
     // ── Normaliser l'analyse ──────────────────────────────────────
     $analyse = [];
     foreach (['ph', 'chlore', 'tac', 'stabilisant', 'temperature'] as $f) {
@@ -962,15 +1012,15 @@ function sunny_pool_api_chat($request) {
             : null;
     }
 
-    // ── 4. Historique (Uniquement si demandé) ─────────────────────
+    // ── 4. Historique du THREAD actif (Uniquement si demandé) ─────
     $history_formatted = [];
-    if ($opt_historique) {
+    if ($opt_historique && $thread_id > 0) {
         $table_name = $wpdb->prefix . 'sunny_chat_messages';
         $messages_history = $wpdb->get_results($wpdb->prepare(
             "SELECT message, response, created_at FROM $table_name
-             WHERE pool_id = %d AND user_id = %d
+             WHERE thread_id = %d AND user_id = %d
              ORDER BY created_at DESC LIMIT 20",
-            $selected_pool_id, $user_id
+            $thread_id, $user_id
         ), ARRAY_A);
 
         if (!empty($messages_history)) {
@@ -1003,6 +1053,7 @@ function sunny_pool_api_chat($request) {
         'produits_summary' => $produits_noms,    // Vide si option décochée
         'history'          => $history_formatted, // Vide si option décochée
         'data_options'     => $data_options_in,  // On transmet les choix pour que n8n s'adapte
+        'thread_id'        => $thread_id,        // ID du thread pour contexte n8n
         'wp_pool_id'       => $selected_pool_id,
         'wp_user_id'       => $user_id,
     ];
@@ -1015,8 +1066,31 @@ function sunny_pool_api_chat($request) {
         $user_id, $selected_pool_id,
         $message, '',                     // réponse vide pour l'instant
         !empty($image_base64),
-        $session_id, $final_conversation_id, 'pending'
+        $session_id, $final_conversation_id, 'pending',
+        null, null, null, $thread_id
     );
+
+    // ── Auto-titre serveur : si c'est le 1er message du thread ───
+    if ($thread_id > 0 && !empty($message)) {
+        $msg_count = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM {$wpdb->prefix}sunny_chat_messages WHERE thread_id = %d",
+            $thread_id
+        ));
+        if ($msg_count <= 1) {
+            $auto_title = mb_substr(trim($message), 0, 40);
+            if (mb_strlen(trim($message)) > 40) $auto_title .= '…';
+            $wpdb->update($thread_table, [
+                'title'      => $auto_title,
+                'updated_at' => current_time('mysql'),
+            ], ['id' => $thread_id]);
+            error_log('[Sunny Chat] Auto-titre thread ' . $thread_id . ': ' . $auto_title);
+        } else {
+            // Mettre à jour updated_at pour trier par récence
+            $wpdb->update($thread_table, [
+                'updated_at' => current_time('mysql'),
+            ], ['id' => $thread_id]);
+        }
+    }
 
     // ── Appel webhook n8n (fire-and-forget) ──────────────────────
     $n8n_response = wp_remote_post(SUNNY_N8N_WEBHOOK_URL, [
@@ -1048,6 +1122,7 @@ function sunny_pool_api_chat($request) {
         'success'         => true,
         'response'        => 'pending',
         'conversation_id' => $final_conversation_id,
+        'thread_id'       => $thread_id,
         'pool_found'      => !empty($pools),
         'user_id'         => $user_id,
     ], 200);
@@ -1059,7 +1134,7 @@ function sunny_pool_api_chat($request) {
  * En mode async, on INSERT d'abord avec status='pending' (réponse vide),
  * puis le callback UPDATE la ligne avec la réponse et status='completed'.
  */
-function sunny_pool_save_chat_message($user_id, $pool_id, $message, $response, $has_image = false, $session_id = '', $conversation_id = '', $status = 'completed', $analyse_extraite = null, $score_eau = null, $alertes_json = null) {
+function sunny_pool_save_chat_message($user_id, $pool_id, $message, $response, $has_image = false, $session_id = '', $conversation_id = '', $status = 'completed', $analyse_extraite = null, $score_eau = null, $alertes_json = null, $thread_id = null) {
     global $wpdb;
     if (!$pool_id) return;
 
@@ -1089,6 +1164,7 @@ function sunny_pool_save_chat_message($user_id, $pool_id, $message, $response, $
     $insert_data = [
         'user_id'         => $user_id,
         'pool_id'         => $pool_id,
+        'thread_id'       => $thread_id ? intval($thread_id) : null,
         'session_id'      => $session_id,
         'conversation_id' => $conversation_id,
         'message'         => wp_strip_all_tags($message),
@@ -1102,15 +1178,17 @@ function sunny_pool_save_chat_message($user_id, $pool_id, $message, $response, $
     if ($alertes_json     !== null) $insert_data['alertes_json']      = wp_json_encode($alertes_json);
     $wpdb->insert($table_name, $insert_data);
 
-    // Garder seulement les 50 derniers messages par piscine
-    $wpdb->query($wpdb->prepare(
-        "DELETE FROM $table_name WHERE pool_id = %d AND id NOT IN (
-            SELECT id FROM (
-                SELECT id FROM $table_name WHERE pool_id = %d ORDER BY created_at DESC LIMIT 50
-            ) as temp
-        )",
-        $pool_id, $pool_id
-    ));
+    // Garder seulement les 100 derniers messages par thread
+    if ($thread_id) {
+        $wpdb->query($wpdb->prepare(
+            "DELETE FROM $table_name WHERE thread_id = %d AND id NOT IN (
+                SELECT id FROM (
+                    SELECT id FROM $table_name WHERE thread_id = %d ORDER BY created_at DESC LIMIT 100
+                ) as temp
+            )",
+            $thread_id, $thread_id
+        ));
+    }
 }
 
 /**
@@ -1241,12 +1319,13 @@ function sunny_pool_api_chat_poll($request) {
 
 /**
  * Retourne l'historique des conversations Sunny depuis la table SQL
- * GET /wp-json/sunny-pool/v1/chat/history?pool_id=123
+ * GET /wp-json/sunny-pool/v1/chat/history?pool_id=123&thread_id=456
  */
 function sunny_pool_api_get_chat_history($request) {
     global $wpdb;
     $user_id = get_current_user_id();
-    $pool_id_param = $request->get_param('pool_id');
+    $pool_id_param   = $request->get_param('pool_id');
+    $thread_id_param = $request->get_param('thread_id');
 
     // Récupérer toutes les piscines de l'utilisateur
     $pools = get_posts([
@@ -1276,12 +1355,20 @@ function sunny_pool_api_get_chat_history($request) {
         $pool_id = $pools[0]->ID;
     }
 
-    // Lire depuis la table SQL
+    // Lire depuis la table SQL — filtrer par thread_id si fourni
     $table_name = $wpdb->prefix . 'sunny_chat_messages';
-    $history = $wpdb->get_results($wpdb->prepare(
-        "SELECT * FROM $table_name WHERE pool_id = %d ORDER BY created_at ASC LIMIT 50",
-        $pool_id
-    ), ARRAY_A);
+
+    if ($thread_id_param && intval($thread_id_param) > 0) {
+        $history = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM $table_name WHERE thread_id = %d AND user_id = %d ORDER BY created_at ASC LIMIT 100",
+            intval($thread_id_param), $user_id
+        ), ARRAY_A);
+    } else {
+        $history = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM $table_name WHERE pool_id = %d AND user_id = %d ORDER BY created_at ASC LIMIT 50",
+            $pool_id, $user_id
+        ), ARRAY_A);
+    }
 
     // Formater pour compatibilité avec le frontend
     $formatted = [];
@@ -1290,6 +1377,7 @@ function sunny_pool_api_get_chat_history($request) {
             'date'             => $row['created_at'],
             'message'          => $row['message'],
             'response'         => $row['response'],
+            'thread_id'        => isset($row['thread_id']) ? intval($row['thread_id']) : null,
             'analyse_extraite' => !empty($row['analyse_extraite']) ? json_decode($row['analyse_extraite'], true) : null,
             'score_eau'        => $row['score_eau'] !== null ? intval($row['score_eau']) : null,
             'alertes'          => !empty($row['alertes_json']) ? json_decode($row['alertes_json'], true) : [],
@@ -1308,7 +1396,229 @@ function sunny_pool_api_get_chat_history($request) {
     ], 200);
 }
 
-// ========== FONCTIONS DE MODIFICATION DES DONNÉES ==========
+// ========== FONCTIONS CRUD THREADS (DISCUSSIONS) ==========
+
+/**
+ * Vérifie qu'une piscine appartient à l'utilisateur
+ */
+function sunny_pool_verify_pool_ownership($pool_id, $user_id) {
+    $owner = get_field('proprietaire', $pool_id);
+    return ($user_id == $owner) || current_user_can('administrator');
+}
+
+/**
+ * Liste les threads d'une piscine
+ * GET /wp-json/sunny-pool/v1/chat/threads?pool_id=123
+ */
+function sunny_pool_api_list_threads($request) {
+    global $wpdb;
+    $user_id = get_current_user_id();
+    $pool_id = intval($request->get_param('pool_id'));
+
+    if (!$pool_id || !sunny_pool_verify_pool_ownership($pool_id, $user_id)) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Piscine non trouvée ou accès refusé'], 403);
+    }
+
+    $table_threads  = $wpdb->prefix . 'sunny_chat_threads';
+    $table_messages = $wpdb->prefix . 'sunny_chat_messages';
+
+    $threads = $wpdb->get_results($wpdb->prepare(
+        "SELECT t.*,
+                (SELECT COUNT(*) FROM $table_messages WHERE thread_id = t.id) AS message_count,
+                (SELECT m.message FROM $table_messages m WHERE m.thread_id = t.id ORDER BY m.created_at DESC LIMIT 1) AS last_message
+         FROM $table_threads t
+         WHERE t.user_id = %d AND t.pool_id = %d
+         ORDER BY t.updated_at DESC
+         LIMIT 50",
+        $user_id, $pool_id
+    ), ARRAY_A);
+
+    $formatted = [];
+    foreach ($threads as $t) {
+        $formatted[] = [
+            'id'            => intval($t['id']),
+            'title'         => $t['title'],
+            'message_count' => intval($t['message_count']),
+            'last_message'  => $t['last_message'] ? mb_substr($t['last_message'], 0, 60) : '',
+            'created_at'    => $t['created_at'],
+            'updated_at'    => $t['updated_at'],
+        ];
+    }
+
+    return new WP_REST_Response([
+        'success' => true,
+        'count'   => count($formatted),
+        'data'    => $formatted,
+    ], 200);
+}
+
+/**
+ * Crée un nouveau thread
+ * POST /wp-json/sunny-pool/v1/chat/threads
+ * Body : { "pool_id": 123, "title": "Optionnel" }
+ */
+function sunny_pool_api_create_thread($request) {
+    global $wpdb;
+    $user_id = get_current_user_id();
+    $params  = $request->get_json_params();
+    $pool_id = intval($params['pool_id'] ?? 0);
+    $title   = sanitize_text_field($params['title'] ?? 'Nouvelle discussion');
+
+    if (!$pool_id || !sunny_pool_verify_pool_ownership($pool_id, $user_id)) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Piscine non trouvée ou accès refusé'], 403);
+    }
+
+    $table = $wpdb->prefix . 'sunny_chat_threads';
+    $wpdb->insert($table, [
+        'user_id'    => $user_id,
+        'pool_id'    => $pool_id,
+        'title'      => $title,
+        'created_at' => current_time('mysql'),
+    ]);
+    $thread_id = (int) $wpdb->insert_id;
+
+    if (!$thread_id) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Erreur de création'], 500);
+    }
+
+    error_log('[Sunny Threads] Créé thread id=' . $thread_id . ' pool=' . $pool_id);
+
+    return new WP_REST_Response([
+        'success' => true,
+        'data'    => [
+            'id'            => $thread_id,
+            'title'         => $title,
+            'message_count' => 0,
+            'last_message'  => '',
+            'created_at'    => current_time('mysql'),
+            'updated_at'    => current_time('mysql'),
+        ],
+    ], 201);
+}
+
+/**
+ * Renomme un thread
+ * PUT /wp-json/sunny-pool/v1/chat/threads/{thread_id}
+ * Body : { "title": "Nouveau titre" }
+ */
+function sunny_pool_api_rename_thread($request) {
+    global $wpdb;
+    $user_id   = get_current_user_id();
+    $thread_id = intval($request->get_param('thread_id'));
+    $params    = $request->get_json_params();
+    $new_title = sanitize_text_field($params['title'] ?? '');
+
+    if (empty($new_title)) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Le titre est requis'], 400);
+    }
+
+    $table  = $wpdb->prefix . 'sunny_chat_threads';
+    $thread = $wpdb->get_row($wpdb->prepare(
+        "SELECT * FROM $table WHERE id = %d AND user_id = %d",
+        $thread_id, $user_id
+    ));
+
+    if (!$thread) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Discussion non trouvée'], 404);
+    }
+
+    $wpdb->update($table, [
+        'title'      => $new_title,
+        'updated_at' => current_time('mysql'),
+    ], ['id' => $thread_id]);
+
+    return new WP_REST_Response([
+        'success' => true,
+        'message' => 'Discussion renommée',
+        'data'    => ['id' => $thread_id, 'title' => $new_title],
+    ], 200);
+}
+
+/**
+ * Supprime un thread et tous ses messages
+ * DELETE /wp-json/sunny-pool/v1/chat/threads/{thread_id}
+ */
+function sunny_pool_api_delete_thread($request) {
+    global $wpdb;
+    $user_id   = get_current_user_id();
+    $thread_id = intval($request->get_param('thread_id'));
+
+    $table  = $wpdb->prefix . 'sunny_chat_threads';
+    $thread = $wpdb->get_row($wpdb->prepare(
+        "SELECT * FROM $table WHERE id = %d AND user_id = %d",
+        $thread_id, $user_id
+    ));
+
+    if (!$thread) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Discussion non trouvée'], 404);
+    }
+
+    // Supprimer tous les messages du thread
+    $table_messages = $wpdb->prefix . 'sunny_chat_messages';
+    $deleted_msgs = $wpdb->delete($table_messages, ['thread_id' => $thread_id]);
+
+    // Supprimer le thread
+    $wpdb->delete($table, ['id' => $thread_id]);
+
+    error_log('[Sunny Threads] Supprimé thread id=' . $thread_id . ' + ' . $deleted_msgs . ' messages');
+
+    return new WP_REST_Response([
+        'success' => true,
+        'message' => 'Discussion et ses messages supprimés',
+        'data'    => ['id' => $thread_id, 'deleted_messages' => $deleted_msgs],
+    ], 200);
+}
+
+/**
+ * Messages d'un thread spécifique
+ * GET /wp-json/sunny-pool/v1/chat/threads/{thread_id}/messages
+ */
+function sunny_pool_api_get_thread_messages($request) {
+    global $wpdb;
+    $user_id   = get_current_user_id();
+    $thread_id = intval($request->get_param('thread_id'));
+
+    // Vérifier ownership du thread
+    $table_threads = $wpdb->prefix . 'sunny_chat_threads';
+    $thread = $wpdb->get_row($wpdb->prepare(
+        "SELECT * FROM $table_threads WHERE id = %d AND user_id = %d",
+        $thread_id, $user_id
+    ));
+
+    if (!$thread) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Discussion non trouvée'], 404);
+    }
+
+    $table_messages = $wpdb->prefix . 'sunny_chat_messages';
+    $messages = $wpdb->get_results($wpdb->prepare(
+        "SELECT * FROM $table_messages WHERE thread_id = %d ORDER BY created_at ASC LIMIT 100",
+        $thread_id
+    ), ARRAY_A);
+
+    $formatted = [];
+    foreach ($messages as $row) {
+        $formatted[] = [
+            'date'             => $row['created_at'],
+            'message'          => $row['message'],
+            'response'         => $row['response'],
+            'analyse_extraite' => !empty($row['analyse_extraite']) ? json_decode($row['analyse_extraite'], true) : null,
+            'score_eau'        => $row['score_eau'] !== null ? intval($row['score_eau']) : null,
+            'alertes'          => !empty($row['alertes_json']) ? json_decode($row['alertes_json'], true) : [],
+            'has_image'        => (bool) $row['has_image'],
+            'status'           => $row['status'],
+        ];
+    }
+
+    return new WP_REST_Response([
+        'success'   => true,
+        'thread_id' => $thread_id,
+        'title'     => $thread->title,
+        'count'     => count($formatted),
+        'data'      => $formatted,
+    ], 200);
+}
+
+
 
 /**
  * Upload une image base64 et l'attache à un post
@@ -1658,4 +1968,33 @@ function sunny_pool_format_pool_data($pool_id) {
             'products' => rest_url('sunny-pool/v1/pool/' . $pool_id . '/products')
         ]
     ];
+}
+
+// =========================================================================
+// HELPER FONCTION (Définie GLOBALEMENT pour éviter l'erreur de re-déclaration)
+// =========================================================================
+function sunny_url_to_base64($url, $max_size_mb = 4) {
+    if (empty($url)) return '';
+
+    $upload_dir = wp_upload_dir();
+    $base_url   = $upload_dir['baseurl'];
+
+    // Si URL locale
+    if (strpos($url, $base_url) === 0) {
+        $relative_path = substr($url, strlen($base_url));
+        $file_path = $upload_dir['basedir'] . $relative_path;
+    } else {
+        // Si URL externe
+        $temp_file = download_url($url, 10);
+        if (is_wp_error($temp_file)) return '';
+        $file_path = $temp_file;
+    }
+
+    if (!file_exists($file_path)) return '';
+    if (filesize($file_path) > $max_size_mb * 1024 * 1024) return '';
+
+    $file_data = file_get_contents($file_path);
+    if (isset($temp_file)) @unlink($temp_file); // Nettoyage fichier temp externe
+
+    return base64_encode($file_data);
 }

@@ -12,20 +12,24 @@ if (!defined('ABSPATH')) exit;
 // Exécuté à l'activation ET à chaque chargement si la version DB a changé
 register_activation_hook(__FILE__, 'sunny_pool_create_db');
 add_action('plugins_loaded', function() {
-    if (get_option('sunny_pool_db_version') !== '2.2') {
+    if (get_option('sunny_pool_db_version') !== '2.4') {
         sunny_pool_create_db();
-        update_option('sunny_pool_db_version', '2.2');
+        update_option('sunny_pool_db_version', '2.4');
     }
 });
 function sunny_pool_create_db() {
     global $wpdb;
-    $table_name = $wpdb->prefix . 'sunny_chat_messages';
     $charset_collate = $wpdb->get_charset_collate();
 
-    $sql = "CREATE TABLE $table_name (
+    require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+
+    // ── Table messages (existante, ajout thread_id) ─────────────────────
+    $table_messages = $wpdb->prefix . 'sunny_chat_messages';
+    $sql_messages = "CREATE TABLE $table_messages (
         id bigint(20) NOT NULL AUTO_INCREMENT,
         user_id bigint(20) NOT NULL,
         pool_id bigint(20) NOT NULL,
+        thread_id bigint(20) DEFAULT NULL,
         session_id varchar(100) NOT NULL,
         conversation_id varchar(100) NOT NULL,
         message text NOT NULL,
@@ -40,14 +44,27 @@ function sunny_pool_create_db() {
         PRIMARY KEY (id),
         KEY user_id (user_id),
         KEY pool_id (pool_id),
+        KEY thread_id (thread_id),
         KEY conversation_id (conversation_id),
         KEY status (status)
     ) $charset_collate;";
+    dbDelta($sql_messages);
 
-    require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-    dbDelta($sql);
+    // ── Table threads (nouvelle v2.3) ───────────────────────────────────
+    $table_threads = $wpdb->prefix . 'sunny_chat_threads';
+    $sql_threads = "CREATE TABLE $table_threads (
+        id bigint(20) NOT NULL AUTO_INCREMENT,
+        user_id bigint(20) NOT NULL,
+        pool_id bigint(20) NOT NULL,
+        title varchar(255) DEFAULT 'Nouvelle discussion',
+        created_at datetime DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY user_pool (user_id,pool_id)
+    ) $charset_collate;";
+    dbDelta($sql_threads);
 
-    error_log('[Sunny Pool] Table ' . $table_name . ' créée/mise à jour');
+    error_log('[Sunny Pool] Tables ' . $table_messages . ' et ' . $table_threads . ' créées/mises à jour (v2.3)');
 }
 
 // Inclure le fichier API REST
