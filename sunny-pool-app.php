@@ -12,42 +12,28 @@ if (!defined('ABSPATH')) exit;
 // Exécuté à l'activation ET à chaque chargement si la version DB a changé
 register_activation_hook(__FILE__, 'sunny_pool_create_db');
 add_action('plugins_loaded', function() {
-    if (get_option('sunny_pool_db_version') !== '2.2') {
+    if (get_option('sunny_pool_db_version') !== '2.3') {
         sunny_pool_create_db();
-        update_option('sunny_pool_db_version', '2.2');
+        update_option('sunny_pool_db_version', '2.3');
     }
 });
 function sunny_pool_create_db() {
     global $wpdb;
-    $table_name = $wpdb->prefix . 'sunny_chat_messages';
     $charset_collate = $wpdb->get_charset_collate();
 
-    $sql = "CREATE TABLE $table_name (
-        id bigint(20) NOT NULL AUTO_INCREMENT,
-        user_id bigint(20) NOT NULL,
-        pool_id bigint(20) NOT NULL,
-        session_id varchar(100) NOT NULL,
-        conversation_id varchar(100) NOT NULL,
-        message text NOT NULL,
-        response text,
-        analyse_extraite text DEFAULT NULL,
-        score_eau tinyint(3) DEFAULT NULL,
-        alertes_json text DEFAULT NULL,
-        has_image tinyint(1) DEFAULT 0,
-        status varchar(20) DEFAULT 'pending',
-        created_at datetime DEFAULT CURRENT_TIMESTAMP,
-        updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        PRIMARY KEY (id),
-        KEY user_id (user_id),
-        KEY pool_id (pool_id),
-        KEY conversation_id (conversation_id),
-        KEY status (status)
-    ) $charset_collate;";
+    // Table des conversations (threads)
+    $table_conversations = $wpdb->prefix . 'sunny_chat_conversations';
+    $sql_conversations = "CREATE TABLE $table_conversations (\n        id bigint(20) NOT NULL AUTO_INCREMENT,\n        user_id bigint(20) NOT NULL,\n        pool_id bigint(20) NOT NULL,\n        title varchar(255) DEFAULT 'Nouvelle discussion',\n        status varchar(20) DEFAULT 'active',\n        created_at datetime DEFAULT CURRENT_TIMESTAMP,\n        updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n        PRIMARY KEY (id),\n        KEY user_id (user_id),\n        KEY pool_id (pool_id),\n        KEY status (status)\n    ) $charset_collate;";
+
+    // Table des messages (mise à jour - conversation_id devient INT)
+    $table_messages = $wpdb->prefix . 'sunny_chat_messages';
+    $sql_messages = "CREATE TABLE $table_messages (\n        id bigint(20) NOT NULL AUTO_INCREMENT,\n        user_id bigint(20) NOT NULL,\n        pool_id bigint(20) NOT NULL,\n        conversation_id bigint(20) DEFAULT 0,\n        session_id varchar(100) NOT NULL,\n        message text NOT NULL,\n        response text,\n        analyse_extraite text DEFAULT NULL,\n        score_eau tinyint(3) DEFAULT NULL,\n        alertes_json text DEFAULT NULL,\n        has_image tinyint(1) DEFAULT 0,\n        status varchar(20) DEFAULT 'pending',\n        created_at datetime DEFAULT CURRENT_TIMESTAMP,\n        updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n        PRIMARY KEY (id),\n        KEY user_id (user_id),\n        KEY pool_id (pool_id),\n        KEY conversation_id (conversation_id),\n        KEY status (status)\n    ) $charset_collate;";
 
     require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-    dbDelta($sql);
+    dbDelta($sql_conversations);
+    dbDelta($sql_messages);
 
-    error_log('[Sunny Pool] Table ' . $table_name . ' créée/mise à jour');
+    error_log('[Sunny Pool] Tables créées/mises à jour: ' . $table_conversations . ', ' . $table_messages);
 }
 
 // Inclure le fichier API REST

@@ -317,6 +317,120 @@ function sunny_chat_shortcode() {
         position: relative;
     }
 
+    /* ── DISCUSSIONS BAR ─────────────────────────────────── */
+    .sunny-discussions-bar {
+        background: linear-gradient(135deg, rgba(25,28,35,0.95), rgba(34,38,47,0.98));
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-bottom: 1px solid var(--gold-border);
+        padding: 10px 18px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        position: relative;
+        z-index: 9;
+    }
+
+    .sunny-new-discussion-btn {
+        background: linear-gradient(135deg, var(--gold), var(--gold-light));
+        color: #000;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 20px;
+        cursor: pointer;
+        font-weight: 700;
+        font-size: 0.8em;
+        white-space: nowrap;
+        transition: all var(--transition);
+        box-shadow: 0 2px 12px rgba(212,175,55,0.3);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .sunny-new-discussion-btn:hover {
+        transform: scale(1.05);
+        box-shadow: 0 4px 20px rgba(212,175,55,0.5);
+    }
+
+    .sunny-discussions-list {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        flex: 1;
+        padding-bottom: 4px;
+        scrollbar-width: thin;
+        scrollbar-color: var(--gold-border) transparent;
+    }
+
+    .sunny-discussions-list::-webkit-scrollbar {
+        height: 4px;
+    }
+
+    .sunny-discussions-list::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .sunny-discussions-list::-webkit-scrollbar-thumb {
+        background: var(--gold-border);
+        border-radius: 2px;
+    }
+
+    .discussion-chip {
+        background: linear-gradient(145deg, var(--bg-card), #252a33);
+        border: 1px solid var(--gold-border);
+        color: var(--text-muted);
+        padding: 6px 14px;
+        border-radius: 16px;
+        font-size: 0.8em;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: all var(--transition);
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        max-width: 180px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .discussion-chip:hover {
+        border-color: var(--gold-light);
+        color: var(--text-main);
+        background: linear-gradient(145deg, rgba(212,175,55,0.15), rgba(212,175,55,0.05));
+        transform: translateY(-1px);
+    }
+
+    .discussion-chip.active {
+        background: linear-gradient(135deg, rgba(212,175,55,0.25), rgba(212,175,55,0.1));
+        border-color: var(--gold-light);
+        color: var(--gold-light);
+        box-shadow: 0 0 15px rgba(212,175,55,0.2);
+    }
+
+    .discussion-chip .chip-title {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .discussion-chip .chip-delete {
+        opacity: 0;
+        font-size: 0.9em;
+        transition: opacity var(--transition);
+        padding: 2px;
+        border-radius: 50%;
+    }
+
+    .discussion-chip:hover .chip-delete {
+        opacity: 1;
+    }
+
+    .discussion-chip .chip-delete:hover {
+        background: rgba(231,76,60,0.3);
+        color: #ff8585;
+    }
+
     /* Custom scrollbar */
     .sunny-chat-messages::-webkit-scrollbar { 
         width: 6px; 
@@ -1450,9 +1564,20 @@ function sunny_chat_shortcode() {
             </div>
         </div>
         <div class="sunny-header-actions">
+            <button class="sunny-hdr-btn" onclick="sunnyNewDiscussion()" title="Nouvelle discussion">✨</button>
             <button class="sunny-hdr-btn" id="hdr-analyse-btn" onclick="sunnyOpenDrawer('analyse')" title="Mesures d'eau">📊</button>
             <button class="sunny-hdr-btn" id="hdr-products-btn" onclick="sunnyOpenDrawer('products')" title="Mes produits">🧴</button>
             <button class="sunny-hdr-btn" id="hdr-options-btn" onclick="sunnyOpenDrawer('options')" title="Options">⚙️</button>
+        </div>
+    </div>
+
+    <!-- Barre de gestion des discussions -->
+    <div class="sunny-discussions-bar">
+        <button class="sunny-new-discussion-btn" onclick="sunnyNewDiscussion()">
+            ✨ Nouvelle discussion
+        </button>
+        <div class="sunny-discussions-list" id="sunny-discussions-list">
+            <span style="color:#666; font-size:0.8em;">Chargement...</span>
         </div>
     </div>
 
@@ -1622,14 +1747,113 @@ function sunny_chat_shortcode() {
             const NONCE        = '<?php echo $nonce; ?>';
             const HISTORY_URL  = '<?php echo esc_url(rest_url('sunny-pool/v1/chat/history')); ?>';
             const PRODUCTS_URL = '<?php echo esc_url(rest_url('sunny-pool/v1/pool')); ?>';
+            const CONVERSATIONS_URL = '<?php echo esc_url(rest_url('sunny-pool/v1/chat/conversations')); ?>';
 
-            let currentPoolId    = <?php echo $selected_pool_id; ?>;
-            let imageBase64      = null;
-            let currentImageType = 'general';
-            let isLoading        = false;
-            let currentDrawer    = null;
+            let currentPoolId       = <?php echo $selected_pool_id; ?>;
+            let currentConversationId = null;
+            let imageBase64         = null;
+            let currentImageType    = 'general';
+            let isLoading           = false;
+            let currentDrawer       = null;
 
             const msgsContainer = document.getElementById('sunny-messages');
+
+            // ── GESTION DES CONVERSATIONS ─────────────────────────────
+            window.sunnyLoadDiscussions = function() {
+                const listEl = document.getElementById('sunny-discussions-list');
+                if (!listEl) return;
+                
+                $.ajax({
+                    url: `${CONVERSATIONS_URL}?pool_id=${currentPoolId}`,
+                    headers: { 'X-WP-Nonce': NONCE },
+                    success: function(data) {
+                        if (data.success) {
+                            listEl.innerHTML = '';
+                            if (data.data.length === 0) {
+                                listEl.innerHTML = '<span style="color:#666; font-size:0.8em; padding:4px;">Aucune discussion</span>';
+                                sunnyNewDiscussion(true);
+                            } else {
+                                data.data.forEach(conv => {
+                                    const chip = document.createElement('div');
+                                    chip.className = 'discussion-chip' + (conv.id == currentConversationId ? ' active' : '');
+                                    chip.innerHTML = `<span class="chip-title">${escapeHtml(conv.title)}</span><span class="chip-delete" onclick="event.stopPropagation(); sunnyDeleteConversation(${conv.id})">×</span>`;
+                                    chip.onclick = () => sunnySwitchConversation(conv.id);
+                                    listEl.appendChild(chip);
+                                });
+                            }
+                        }
+                    },
+                    error: function() {
+                        listEl.innerHTML = '<span style="color:#e74c3c; font-size:0.8em;">Erreur chargement</span>';
+                    }
+                });
+            };
+
+            window.sunnyNewDiscussion = function(silent = false) {
+                let title = 'Discussion ' + new Date().toLocaleDateString('fr-FR');
+                if (!silent) {
+                    title = prompt("Nom de la discussion :", title);
+                    if (!title) return;
+                }
+
+                $.ajax({
+                    url: CONVERSATIONS_URL,
+                    method: 'POST',
+                    headers: { 'X-WP-Nonce': NONCE, 'Content-Type': 'application/json' },
+                    data: JSON.stringify({ pool_id: currentPoolId, title: title }),
+                    success: function(data) {
+                        if (data.success) {
+                            currentConversationId = data.data.id;
+                            sunnyLoadDiscussions();
+                            sunnyClearChat();
+                            if(!silent) appendBubble('✨ Nouvelle discussion démarrée.', 'system');
+                        }
+                    },
+                    error: function() {
+                        if(!silent) appendBubble('⚠️ Erreur lors de la création de la discussion.', 'system');
+                    }
+                });
+            };
+
+            window.sunnySwitchConversation = function(convId) {
+                currentConversationId = convId;
+                sunnyLoadDiscussions();
+                sunnyClearChat();
+                loadChatHistory(currentPoolId);
+            };
+
+            window.sunnyDeleteConversation = function(convId) {
+                if (!confirm('Supprimer cette conversation et tous ses messages ?')) return;
+                
+                $.ajax({
+                    url: `${CONVERSATIONS_URL}/${convId}`,
+                    method: 'DELETE',
+                    headers: { 'X-WP-Nonce': NONCE },
+                    success: function(data) {
+                        if (data.success) {
+                            if (currentConversationId == convId) {
+                                currentConversationId = null;
+                                sunnyClearChat();
+                            }
+                            sunnyLoadDiscussions();
+                            appendBubble('🗑️ Conversation supprimée.', 'system');
+                        }
+                    },
+                    error: function() {
+                        appendBubble('⚠️ Erreur lors de la suppression.', 'system');
+                    }
+                });
+            };
+
+            function sunnyClearChat() {
+                if (msgsContainer) msgsContainer.innerHTML = '<div class="chat-bubble system">Bonjour ! Je suis Sunny 🌞 Posez-moi vos questions.</div>';
+            }
+
+            function escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
 
             // ── DRAWER SYSTEM ────────────────────────────────────────
             window.sunnyOpenDrawer = function(name) {
