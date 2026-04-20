@@ -56,6 +56,11 @@ if (optAlertes) {
   if (analyse.stabilisant !== null && analyse.stabilisant !== undefined && analyse.stabilisant > 60)
     alertes.push({ urgence: 'moyenne', msg: 'Stabilisant élevé (' + analyse.stabilisant + ' mg/L) → dilution + stop chlore stabilisé' });
 
+  if (analyse.temperature !== null && analyse.temperature !== undefined) {
+    if (analyse.temperature > 25) alertes.push({ urgence: 'moyenne', msg: 'Température élevée (' + analyse.temperature + '°C) → risque algues, augmenter filtration' });
+    if (analyse.temperature > 33) alertes.push({ urgence: 'haute', msg: 'Canicule (' + analyse.temperature + '°C) → filtration 24h/24 recommandée' });
+    if (analyse.temperature < 3) alertes.push({ urgence: 'haute', msg: 'Risque gel (' + analyse.temperature + '°C) → filtration nuit obligatoire' });
+  }
   // Alertes météo uniquement si la météo est transmise
   if (optMeteo) {
     if (maxT > 33) alertes.push({ urgence: 'haute', msg: 'Canicule ' + maxT + '°C → filtration 24h/24' });
@@ -1154,7 +1159,7 @@ ${DOCUMENTATION_PISCINE}
 Type : ${typePool} | Volume : ${pool.volume || '?'} m³ | Filtration : ${filtrePool}
 Traitement : ${traitPool} | Équipements : ${(pool.equipements || []).join(', ') || 'non renseignés'}
 Produits : ${produitsTexte}${photosNote}
-Analyse : pH ${analyse.ph ?? '?'} | Chlore ${analyse.chlore ?? '?'} mg/L | TAC ${analyse.tac ?? '?'} mg/L
+Analyse : pH ${analyse.ph ?? '?'} | Chlore ${analyse.chlore ?? '?'} mg/L | TAC ${analyse.tac ?? '?'} mg/L | stabilisant ${analyse.stabilisant ?? '?'} | temperature ${analyse.temperature ?? '?'}°C
 Météo : ${optMeteo ? ('Max ' + maxT + '°C / Min ' + minT + '°C / Pluie ' + pluie + ' mm | Filtration : ' + filtrationReco) : 'non transmise'}
 🖼️ CONTEXTE IMAGE : ${imageContext}
 ${alertesContextuelles}
