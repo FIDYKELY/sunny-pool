@@ -757,6 +757,269 @@ function sunny_chat_shortcode() {
         font-size: 0.72em;
     }
 
+    /* ── MODAL RÉSULTAT ANALYSE ────────────────────────── */
+    .sunny-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.72);
+        z-index: 99990;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        animation: modal-fade-in 0.22s ease both;
+    }
+    @keyframes modal-fade-in {
+        from { opacity: 0; }
+        to   { opacity: 1; }
+    }
+    .sunny-modal-backdrop.closing {
+        animation: modal-fade-out 0.18s ease both;
+    }
+    @keyframes modal-fade-out {
+        from { opacity: 1; }
+        to   { opacity: 0; }
+    }
+
+    .sunny-modal {
+        background: linear-gradient(145deg, var(--bg-card) 0%, #1a1d24 100%);
+        border: 1px solid var(--gold-border);
+        border-radius: var(--radius-lg);
+        box-shadow: 0 24px 70px rgba(0,0,0,0.7), 0 0 0 1px rgba(212,175,55,0.08);
+        width: 100%;
+        max-width: 560px;
+        max-height: 88vh;
+        overflow-y: auto;
+        animation: modal-slide-in 0.28s cubic-bezier(.4,0,.2,1) both;
+    }
+    @keyframes modal-slide-in {
+        from { opacity: 0; transform: translateY(18px) scale(0.97); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .sunny-modal::-webkit-scrollbar { width: 5px; }
+    .sunny-modal::-webkit-scrollbar-thumb { background: var(--gold-border); border-radius: 3px; }
+
+    .sunny-modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 18px 20px 14px;
+        border-bottom: 1px solid var(--gold-dim);
+        position: sticky;
+        top: 0;
+        background: var(--bg-card);
+        z-index: 1;
+    }
+    .sunny-modal-title {
+        font-size: 0.95em;
+        font-weight: 700;
+        color: var(--gold-light);
+        letter-spacing: 0.3px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .sunny-modal-close {
+        width: 28px; height: 28px;
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(255,255,255,0.06);
+        border: 1px solid var(--gold-dim);
+        border-radius: 50%;
+        color: var(--text-muted);
+        cursor: pointer;
+        font-size: 0.8em;
+        transition: all var(--transition);
+        font-family: inherit !important;
+    }
+    .sunny-modal-close:hover { background: rgba(231,76,60,0.18); color: #ff8585; border-color: rgba(231,76,60,0.3); }
+
+    .sunny-modal-body {
+        padding: 18px 20px;
+    }
+
+    /* Status "en cours" */
+    .sunny-modal-pending {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+        padding: 28px 20px;
+        text-align: center;
+    }
+    .sunny-modal-pending-spinner {
+        display: flex; gap: 6px;
+    }
+    .sunny-modal-pending-spinner span {
+        width: 10px; height: 10px;
+        background: var(--gold);
+        border-radius: 50%;
+        animation: sc-bounce 1.3s ease-in-out infinite;
+        font-family: inherit !important;
+    }
+    .sunny-modal-pending-spinner span:nth-child(2) { animation-delay: 0.18s; }
+    .sunny-modal-pending-spinner span:nth-child(3) { animation-delay: 0.36s; }
+    @keyframes sc-bounce {
+        0%,60%,100% { transform: translateY(0); }
+        30%          { transform: translateY(-8px); }
+    }
+    .sunny-modal-pending-text {
+        color: var(--text-muted);
+        font-size: 0.88em;
+        line-height: 1.5;
+    }
+    .sunny-modal-pending-text strong { color: var(--gold-light); display: block; margin-bottom: 4px; font-size: 1.05em; }
+
+    /* Diagnostic lines */
+    .diag-line {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 10px 12px;
+        border-radius: var(--radius-sm);
+        background: rgba(255,255,255,0.03);
+        border: 1px solid var(--gold-dim);
+        margin-bottom: 8px;
+        font-size: 0.875em;
+        line-height: 1.5;
+        color: var(--text-main);
+        animation: bubble-in 0.25s ease both;
+    }
+    @keyframes bubble-in {
+        from { opacity: 0; transform: translateY(6px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+    .diag-line:nth-child(1) { animation-delay: 0.04s; }
+    .diag-line:nth-child(2) { animation-delay: 0.08s; }
+    .diag-line:nth-child(3) { animation-delay: 0.12s; }
+    .diag-line:nth-child(4) { animation-delay: 0.16s; }
+    .diag-line:nth-child(5) { animation-delay: 0.20s; }
+    .diag-line.urgent { border-color: rgba(229,92,92,0.4); background: rgba(229,92,92,0.07); }
+    .diag-line.warning { border-color: rgba(232,146,74,0.4); background: rgba(232,146,74,0.07); }
+    .diag-line.ok { border-color: rgba(74,207,168,0.3); background: rgba(74,207,168,0.05); }
+    .diag-emoji { font-size: 1.1em; flex-shrink: 0; margin-top: 1px; font-family: 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif !important; }
+
+    /* Alertes dans le modal */
+    .modal-alertes { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+    .modal-alerte {
+        display: flex; align-items: flex-start; gap: 8px;
+        padding: 9px 12px;
+        border-radius: var(--radius-sm);
+        font-size: 0.82em;
+        line-height: 1.4;
+        border-left: 3px solid;
+    }
+    .modal-alerte.haute   { background: rgba(229,92,92,0.1);  border-color: #e55c5c; color: #ff9090; }
+    .modal-alerte.moyenne { background: rgba(232,146,74,0.1); border-color: #e8924a; color: #ffa96e; }
+    .modal-alerte.faible  { background: rgba(212,175,55,0.1); border-color: var(--gold); color: var(--gold-light); }
+    .modal-alerte-icon { font-family: 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif !important; }
+
+    /* Bouton Discuter */
+    .sunny-modal-footer {
+        padding: 14px 20px 18px;
+        border-top: 1px solid var(--gold-dim);
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+    }
+    .btn-discuss {
+        display: inline-flex; align-items: center; gap: 6px;
+        background: linear-gradient(135deg, #c9a43f 0%, var(--gold-light) 100%);
+        color: #1a1600;
+        border: none;
+        border-radius: var(--radius-sm);
+        padding: 9px 16px;
+        font-family: inherit !important;
+        font-size: 0.85em;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all var(--transition);
+        box-shadow: 0 3px 12px rgba(201,168,76,0.3);
+    }
+    .btn-discuss:hover { box-shadow: 0 5px 18px rgba(201,168,76,0.5); transform: translateY(-1px); }
+    .btn-close-modal {
+        display: inline-flex; align-items: center;
+        background: rgba(255,255,255,0.06);
+        border: 1px solid var(--gold-dim);
+        border-radius: var(--radius-sm);
+        color: var(--text-muted);
+        padding: 9px 14px;
+        font-family: inherit !important;
+        font-size: 0.85em;
+        cursor: pointer;
+        transition: all var(--transition);
+    }
+    .btn-close-modal:hover { background: rgba(255,255,255,0.1); color: var(--text-main); }
+
+    /* ── HISTORIQUE ENRICHI ─────────────────────────────── */
+    .analyse-history-item {
+        background: rgba(255,255,255,0.03);
+        border: 1px solid var(--gold-dim);
+        border-radius: var(--radius-sm);
+        padding: 10px 12px;
+        font-size: 0.8em;
+        color: var(--text-main);
+        transition: border-color var(--transition);
+    }
+    .analyse-history-item:hover { border-color: var(--gold-border); }
+    .analyse-history-item-header {
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        margin-bottom: 6px; flex-wrap: wrap;
+    }
+    .analyse-history-status {
+        font-size: 0.72em;
+        padding: 2px 7px;
+        border-radius: 10px;
+        font-weight: 600;
+    }
+    .analyse-history-status.completed { background: rgba(74,207,168,0.15); color: #4acfa8; }
+    .analyse-history-status.pending   { background: rgba(232,146,74,0.15); color: #e8924a; }
+    .analyse-history-status.error     { background: rgba(229,92,92,0.15);  color: #e55c5c; }
+
+    .analyse-history-diag {
+        margin-top: 8px;
+        font-size: 0.78em;
+        color: var(--text-muted);
+        line-height: 1.5;
+        white-space: pre-wrap;
+        border-top: 1px solid var(--gold-dim);
+        padding-top: 7px;
+        display: none; /* toggle */
+    }
+    .analyse-history-diag.expanded { display: block; }
+
+    .analyse-history-actions {
+        display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap;
+    }
+    .btn-history-discuss {
+        display: inline-flex; align-items: center; gap: 4px;
+        background: var(--gold-dim);
+        border: 1px solid var(--gold-border);
+        color: var(--gold-light);
+        border-radius: 20px;
+        padding: 3px 10px;
+        font-family: inherit !important;
+        font-size: 0.75em;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all var(--transition);
+    }
+    .btn-history-discuss:hover { background: rgba(212,175,55,0.3); }
+    .btn-history-toggle {
+        display: inline-flex; align-items: center; gap: 4px;
+        background: rgba(255,255,255,0.05);
+        border: 1px solid var(--gold-dim);
+        color: var(--text-muted);
+        border-radius: 20px;
+        padding: 3px 10px;
+        font-family: inherit !important;
+        font-size: 0.75em;
+        cursor: pointer;
+        transition: all var(--transition);
+    }
+    .btn-history-toggle:hover { background: rgba(255,255,255,0.09); color: var(--text-main); }
+
     /* ── DRAWER : PRODUITS ──────────────────────────────── */
     .sunny-products-list { margin-bottom: 14px; }
 
@@ -1760,28 +2023,15 @@ function sunny_chat_shortcode() {
             <button class="sunny-image-remove" onclick="sunnyRemoveImage()" title="Retirer">✕</button>
         </div>
 
-        <!-- Hidden file inputs -->
-        <input type="file" id="sunny-image-water"   class="sunny-file-input" accept="image/*" capture="environment" onchange="sunnyLoadImage(this,'water')">
-        <input type="file" id="sunny-image-product" class="sunny-file-input" accept="image/*" capture="environment" onchange="sunnyLoadImage(this,'product')">
-        <input type="file" id="sunny-image-pool"    class="sunny-file-input" accept="image/*" capture="environment" onchange="sunnyLoadImage(this,'pool')">
+        <!-- Hidden file input -->
+        <input type="file" id="sunny-image-file" class="sunny-file-input" accept="image/*" capture="environment" onchange="sunnyLoadImage(this)">
 
         <!-- Unified input row -->
         <div class="sunny-input-unified">
-            <!-- Attachment button + dropdown -->
-            <div class="sunny-attach-btn" id="sunny-attach-btn" onclick="sunnyToggleAttachMenu(event)">
-                ＋
-                <div class="sunny-attach-menu" id="sunny-attach-menu">
-                    <label class="attach-menu-item" onclick="document.getElementById('sunny-image-water').click(); sunnyCloseAttachMenu();">
-                        <span class="item-icon">💧</span> Eau / Bandelette
-                    </label>
-                    <label class="attach-menu-item" onclick="document.getElementById('sunny-image-product').click(); sunnyCloseAttachMenu();">
-                        <span class="item-icon">🧴</span> Produit
-                    </label>
-                    <label class="attach-menu-item" onclick="document.getElementById('sunny-image-pool').click(); sunnyCloseAttachMenu();">
-                        <span class="item-icon">🏊</span> Photo piscine
-                    </label>
-                </div>
-            </div>
+            <!-- Attachment button -->
+            <button class="sunny-attach-btn" id="sunny-attach-btn" onclick="document.getElementById('sunny-image-file').click();" title="Ajouter une photo">
+                📎
+            </button>
 
             <textarea id="sunny-input"
                 placeholder="Posez votre question à Sunny…"
@@ -1795,6 +2045,9 @@ function sunny_chat_shortcode() {
 
     <!-- ── DRAWER OVERLAY ── -->
     <div class="sunny-drawer-overlay" id="sunny-drawer-overlay" onclick="sunnyCloseDrawer()"></div>
+
+    <!-- ── MODAL RÉSULTAT ANALYSE ── -->
+    <div id="sunny-analyse-modal-root"></div>
 
     <!-- ── DRAWER : ANALYSE ── -->
     <div class="sunny-drawer" id="drawer-analyse">
@@ -1971,26 +2224,6 @@ function sunny_chat_shortcode() {
                 document.querySelectorAll('.sunny-hdr-btn').forEach(b => b.classList.remove('active'));
                 currentDrawer = null;
             };
-
-            // ── ATTACH MENU ──────────────────────────────────────────
-            window.sunnyToggleAttachMenu = function(e) {
-                e.stopPropagation();
-                const menu = document.getElementById('sunny-attach-menu');
-                const btn = document.getElementById('sunny-attach-btn');
-                const isOpen = menu.classList.toggle('open');
-                if (btn) btn.classList.toggle('active', isOpen);
-            };
-
-            window.sunnyCloseAttachMenu = function() {
-                const menu = document.getElementById('sunny-attach-menu');
-                const btn = document.getElementById('sunny-attach-btn');
-                menu.classList.remove('open');
-                if (btn) btn.classList.remove('active');
-            };
-
-            document.addEventListener('click', function(e) {
-                if (!e.target.closest('#sunny-attach-btn')) sunnyCloseAttachMenu();
-            });
 
             // ── HISTORY ─────────────────────────────────────────────
             function loadChatHistory(poolId, threadId) {
@@ -2176,6 +2409,29 @@ function sunny_chat_shortcode() {
             setTimeout(function() { loadThreads(true); }, 100);
 
             // ── PUBLIC FUNCTIONS ─────────────────────────────────────
+            // ── CLEAR ANALYSE & OPTIONS FIELDS ────────────────────────
+            function clearAnalyseFields() {
+                // Vider les champs d'analyse (Mesures d'eau)
+                ['ph','chlore','tac','stabilisant','temperature'].forEach(function(f) {
+                    const el = document.getElementById('ana-' + f);
+                    if (el) el.value = '';
+                });
+                
+                // Reset les checkboxes "Données à inclure" à leurs valeurs par défaut
+                const defaultChecked = {
+                    'opt-meteo': true,
+                    'opt-historique': true,
+                    'opt-produits': false,
+                    'opt-alertes': true,
+                    'opt-planning': false,
+                    'opt-coordonnees': true
+                };
+                Object.keys(defaultChecked).forEach(function(id) {
+                    const el = document.getElementById(id);
+                    if (el) el.checked = defaultChecked[id];
+                });
+            }
+
             window.sunnySend = function() {
                 if (isLoading) return;
                 const input   = document.getElementById('sunny-input');
@@ -2192,6 +2448,10 @@ function sunny_chat_shortcode() {
                 if (suggestBar) suggestBar.style.display = 'none';
 
                 const analyse = buildAnalyse();
+                
+                // Vider les champs d'analyse et reset les options après envoi
+                clearAnalyseFields();
+                
                 sendToSunny(message, imageBase64, analyse);
             };
 
@@ -2200,7 +2460,7 @@ function sunny_chat_shortcode() {
                 sunnySend();
             };
 
-            window.sunnyLoadImage = function(input, type) {
+            window.sunnyLoadImage = function(input) {
                 const file = input.files[0];
                 if (!file) return;
                 if (file.size > 4 * 1024 * 1024) {
@@ -2211,14 +2471,11 @@ function sunny_chat_shortcode() {
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     imageBase64      = e.target.result;
-                    currentImageType = type || 'general';
-
-                    const labelMap = { water:'💧 Eau / Bandelette', product:'🧴 Produit', pool:'🏊 Piscine', general:'📷 Photo' };
-                    const subMap   = { water:'Analyse de bandelette', product:'Identification produit', pool:'Aperçu piscine', general:'Image jointe' };
+                    currentImageType = 'general';
 
                     document.getElementById('img-preview-thumb').src = imageBase64;
-                    document.getElementById('img-preview-label').textContent = labelMap[currentImageType] || '📷 Photo';
-                    document.getElementById('img-preview-sub').textContent   = subMap[currentImageType] || 'Image jointe';
+                    document.getElementById('img-preview-label').textContent = '📷 Photo';
+                    document.getElementById('img-preview-sub').textContent   = 'Image jointe';
                     document.getElementById('sunny-image-preview-bar').classList.add('active');
                 };
                 reader.readAsDataURL(file);
@@ -2229,10 +2486,8 @@ function sunny_chat_shortcode() {
                 currentImageType = 'general';
                 document.getElementById('sunny-image-preview-bar').classList.remove('active');
                 document.getElementById('img-preview-thumb').src = '';
-                ['sunny-image-water','sunny-image-product','sunny-image-pool'].forEach(function(id) {
-                    const el = document.getElementById(id);
-                    if (el) el.value = '';
-                });
+                const el = document.getElementById('sunny-image-file');
+                if (el) el.value = '';
             };
 
             // ── DATA OPTIONS ─────────────────────────────────────────
@@ -2467,58 +2722,330 @@ function sunny_chat_shortcode() {
                 });
             }
 
+            // ══════════════════════════════════════════════════════
+            // MODAL ANALYSE — affiche "en cours" puis le résultat
+            // ══════════════════════════════════════════════════════
+
+            let currentAnalyseModal = null; // {backdrop, analyseId, analyseData}
+
+            function openAnalyseModal(state, analyseData) {
+                // state: 'pending' | 'result'
+                const root = document.getElementById('sunny-analyse-modal-root');
+                if (!root) return;
+
+                // Fermer modal existant sans animation
+                if (currentAnalyseModal && currentAnalyseModal.backdrop) {
+                    currentAnalyseModal.backdrop.remove();
+                }
+
+                const backdrop = document.createElement('div');
+                backdrop.className = 'sunny-modal-backdrop';
+                backdrop.id = 'sunny-analyse-modal-backdrop';
+
+                if (state === 'pending') {
+                    backdrop.innerHTML = `
+                        <div class="sunny-modal">
+                            <div class="sunny-modal-header">
+                                <div class="sunny-modal-title">📊 Analyse en cours</div>
+                                <button class="sunny-modal-close" onclick="closeAnalyseModal()">✕</button>
+                            </div>
+                            <div class="sunny-modal-body">
+                                <div class="sunny-modal-pending">
+                                    <div class="sunny-modal-pending-spinner">
+                                        <span></span><span></span><span></span>
+                                    </div>
+                                    <div class="sunny-modal-pending-text">
+                                        <strong>Sunny analyse votre eau 🌞</strong>
+                                        L'analyse est en cours de traitement.<br>
+                                        Cela prend généralement 10 à 30 secondes.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>`;
+                } else if (state === 'result' && analyseData) {
+                    const diagHtml  = buildDiagHtml(analyseData.response_n8n || '');
+                    const alertHtml = buildAlertesHtml(analyseData.alertes || []);
+                    const dateStr   = analyseData.created_at
+                        ? new Date(analyseData.created_at.replace(' ','T')).toLocaleString('fr-FR')
+                        : '';
+
+                    backdrop.innerHTML = `
+                        <div class="sunny-modal">
+                            <div class="sunny-modal-header">
+                                <div class="sunny-modal-title">📊 Résultat de l'analyse</div>
+                                <button class="sunny-modal-close" onclick="closeAnalyseModal()">✕</button>
+                            </div>
+                            <div class="sunny-modal-body">
+                                ${dateStr ? '<p style="color:var(--text-muted);font-size:0.76em;margin:0 0 12px;">' + dateStr + '</p>' : ''}
+                                <p style="color:var(--gold);font-size:0.8em;font-weight:700;margin:0 0 10px;text-transform:uppercase;letter-spacing:0.5px;">🔬 Diagnostic rapide</p>
+                                ${diagHtml || '<p style="color:var(--text-muted);font-size:0.85em;">Aucun diagnostic disponible.</p>'}
+                                ${alertHtml ? '<p style="color:var(--gold);font-size:0.8em;font-weight:700;margin:16px 0 8px;text-transform:uppercase;letter-spacing:0.5px;">⚠️ Alertes</p>' + alertHtml : ''}
+                            </div>
+                            <div class="sunny-modal-footer">
+                                <button class="btn-close-modal" onclick="closeAnalyseModal()">Fermer</button>
+                                <button class="btn-discuss" onclick="discuterAnalyse(${JSON.stringify(analyseData).replace(/"/g, '&quot;')})">
+                                    💬 Discuter avec Sunny
+                                </button>
+                            </div>
+                        </div>`;
+                }
+
+                root.appendChild(backdrop);
+                currentAnalyseModal = { backdrop, analyseId: analyseData ? analyseData.analyse_id : null, analyseData };
+
+                // Fermer en cliquant hors du modal
+                backdrop.addEventListener('click', function(e) {
+                    if (e.target === backdrop) closeAnalyseModal();
+                });
+            }
+
+            window.closeAnalyseModal = function() {
+                const backdrop = document.getElementById('sunny-analyse-modal-backdrop');
+                if (!backdrop) return;
+                backdrop.classList.add('closing');
+                setTimeout(function() { backdrop.remove(); }, 180);
+                currentAnalyseModal = null;
+            };
+
+            // ── Construction du diagnostic HTML ─────────────────
+            function buildDiagHtml(responseText) {
+                if (!responseText) return '';
+                const lines = responseText.split('\n').map(l => l.trim()).filter(Boolean);
+                let html = '';
+                lines.forEach(function(line) {
+                    // Lignes qui contiennent une flèche → (lignes de diagnostic)
+                    if (!line.match(/→|->|:/) && !line.match(/^[-•*]/)) return;
+
+                    // Détecter statut
+                    let cls = '';
+                    if (line.includes('🔴') || line.toLowerCase().includes('urgent')) cls = 'urgent';
+                    else if (line.includes('⚠️') || line.toLowerCase().includes('corriger')) cls = 'warning';
+                    else if (line.includes('✅') || line.toLowerCase().includes('ok')) cls = 'ok';
+
+                    // Extraire emoji de statut
+                    let emoji = '•';
+                    if (line.includes('🔴')) emoji = '🔴';
+                    else if (line.includes('⚠️')) emoji = '⚠️';
+                    else if (line.includes('✅')) emoji = '✅';
+
+                    // Nettoyer la ligne
+                    const clean = line.replace(/^[-•*]\s*/, '').replace(/^Diagnostic rapide\s*:?\s*/i, '').trim();
+                    if (!clean) return;
+
+                    html += `<div class="diag-line ${cls}"><span class="diag-emoji">${emoji}</span><span>${clean}</span></div>`;
+                });
+                return html || `<div style="color:var(--text-muted);font-size:0.85em;white-space:pre-wrap;">${responseText}</div>`;
+            }
+
+            // ── Construction des alertes HTML ────────────────────
+            function buildAlertesHtml(alertes) {
+                if (!alertes || !alertes.length) return '';
+                return '<div class="modal-alertes">'
+                    + alertes.map(function(a) {
+                        const urg = a.urgence || 'faible';
+                        const icon = urg === 'haute' ? '🔴' : (urg === 'moyenne' ? '⚠️' : '⚡');
+                        return `<div class="modal-alerte ${urg}"><span class="modal-alerte-icon">${icon}</span><span>${a.msg}</span></div>`;
+                    }).join('')
+                    + '</div>';
+            }
+
+            // ── Polling spécifique analyse ───────────────────────
+            function pollAnalyseResult(analyseId, attempts) {
+                const maxAttempts = 60;
+                const interval    = 3000;
+
+                if (attempts >= maxAttempts) {
+                    openAnalyseModal('result', {
+                        response_n8n: 'L\'analyse a pris trop de temps. Vérifiez l\'historique dans quelques instants.',
+                        alertes: [],
+                        created_at: null,
+                        analyse_id: analyseId
+                    });
+                    loadAnalyseHistory();
+                    return;
+                }
+
+                $.ajax({
+                    url: ANALYSE_HISTORY_URL + '?pool_id=' + currentPoolId + '&limit=5',
+                    headers: { 'X-WP-Nonce': NONCE },
+                    success: function(data) {
+                        if (!data.success || !data.data) {
+                            setTimeout(function() { pollAnalyseResult(analyseId, attempts + 1); }, interval);
+                            return;
+                        }
+
+                        // Chercher notre analyse dans les résultats
+                        const found = data.data.find(function(item) {
+                            return item.analyse_id === analyseId && item.status === 'completed' && item.response_n8n;
+                        });
+
+                        if (found) {
+                            loadAnalyseHistory();
+                            openAnalyseModal('result', found);
+                        } else {
+                            setTimeout(function() { pollAnalyseResult(analyseId, attempts + 1); }, interval);
+                        }
+                    },
+                    error: function() {
+                        setTimeout(function() { pollAnalyseResult(analyseId, attempts + 1); }, interval);
+                    }
+                });
+            }
+
+            // ── Bouton "Discuter avec Sunny" ─────────────────────
+            window.discuterAnalyse = function(analyseData) {
+                closeAnalyseModal();
+                sunnyCloseDrawer();
+
+                // Construire le contexte à injecter dans le thread
+                const a = analyseData.analyse || {};
+                const measures = [];
+                if (a.ph          != null) measures.push('pH ' + a.ph);
+                if (a.chlore      != null) measures.push('Chlore ' + a.chlore + ' mg/L');
+                if (a.tac         != null) measures.push('TAC ' + a.tac + ' mg/L');
+                if (a.stabilisant != null) measures.push('Stabilisant ' + a.stabilisant + ' mg/L');
+                if (a.temperature != null) measures.push('Temp ' + a.temperature + '°C');
+
+                const contextMsg = '📊 Discussion basée sur mon analyse du '
+                    + (analyseData.created_at ? new Date(analyseData.created_at.replace(' ','T')).toLocaleDateString('fr-FR') : 'aujourd\'hui')
+                    + '\nMesures : ' + (measures.join(' | ') || 'voir historique')
+                    + (analyseData.response_n8n ? '\n\nDiagnostic :\n' + analyseData.response_n8n.substring(0, 400) : '');
+
+                // Créer un thread, puis y envoyer le contexte automatiquement
+                $.ajax({
+                    url: THREADS_URL,
+                    method: 'POST',
+                    contentType: 'application/json',
+                    headers: { 'X-WP-Nonce': NONCE },
+                    data: JSON.stringify({
+                        pool_id: currentPoolId,
+                        title: '📊 Analyse ' + (analyseData.created_at ? new Date(analyseData.created_at.replace(' ','T')).toLocaleDateString('fr-FR') : '')
+                    }),
+                    success: function(data) {
+                        if (data.success && data.data) {
+                            switchToThread(data.data.id, data.data.title);
+                            loadThreads();
+
+                            // Pré-remplir la zone de texte avec le contexte
+                            const input = document.getElementById('sunny-input');
+                            if (input) {
+                                input.value = 'Sur la base de cette analyse :\n' + (analyseData.response_n8n ? analyseData.response_n8n.substring(0, 300) : contextMsg) + '\n\nQue dois-je faire en priorité ?';
+                                input.style.height = 'auto';
+                                input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+                                input.focus();
+                            }
+
+                            appendBubble('📊 Discussion ouverte à partir de votre analyse. La zone de texte a été pré-remplie avec le diagnostic — modifiez-la ou envoyez directement.', 'system');
+                        } else {
+                            sunnyToast('Erreur lors de la création de la discussion.', 'error');
+                        }
+                    },
+                    error: function() { sunnyToast('Erreur de connexion.', 'error'); }
+                });
+            };
+
+            // ── Discuter depuis l'historique ─────────────────────
+            window.discuterDepuisHistorique = function(analyseDataJson) {
+                var analyseData;
+                try { analyseData = JSON.parse(decodeURIComponent(analyseDataJson)); } catch(e) { return; }
+                discuterAnalyse(analyseData);
+            };
+
+            // ── Voir diagnostic depuis l'historique ──────────────
+            window.toggleDiagHistorique = function(id) {
+                const el = document.getElementById('diag-hist-' + id);
+                const btn = document.getElementById('diag-btn-' + id);
+                if (!el) return;
+                const expanded = el.classList.toggle('expanded');
+                if (btn) btn.textContent = expanded ? '▲ Masquer' : '▼ Diagnostic';
+            };
+
+            // ══════════════════════════════════════════════════════
+            // HISTORIQUE ENRICHI
+            // ══════════════════════════════════════════════════════
             function renderAnalyseHistory(items) {
                 const container = document.getElementById('sunny-analyse-history-list');
                 if (!container) return;
 
                 if (!items || !items.length) {
-                    container.innerHTML = '<div class="analyse-history-item">Aucune analyse enregistrée.</div>';
+                    container.innerHTML = '<div class="analyse-history-item" style="color:var(--text-muted);font-style:italic;">Aucune analyse enregistrée.</div>';
                     return;
                 }
 
                 let html = '';
-                items.forEach(function(item) {
-                    const date = item.created_at ? new Date(item.created_at.replace(' ', 'T')).toLocaleString('fr-FR') : '-';
+                items.forEach(function(item, idx) {
+                    const date = item.created_at
+                        ? new Date(item.created_at.replace(' ', 'T')).toLocaleString('fr-FR', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })
+                        : '-';
                     const status = item.status || 'pending';
                     const a = item.analyse || {};
 
                     const pills = [];
-                    if (a.ph !== null && a.ph !== undefined) pills.push('<span class="analyse-pill">pH: ' + a.ph + '</span>');
-                    if (a.chlore !== null && a.chlore !== undefined) pills.push('<span class="analyse-pill">Cl: ' + a.chlore + '</span>');
-                    if (a.tac !== null && a.tac !== undefined) pills.push('<span class="analyse-pill">TAC: ' + a.tac + '</span>');
-                    if (a.stabilisant !== null && a.stabilisant !== undefined) pills.push('<span class="analyse-pill">Stab: ' + a.stabilisant + '</span>');
-                    if (a.temperature !== null && a.temperature !== undefined) pills.push('<span class="analyse-pill">Temp: ' + a.temperature + '°C</span>');
+                    if (a.ph          != null) pills.push('<span class="analyse-pill">pH ' + a.ph + '</span>');
+                    if (a.chlore      != null) pills.push('<span class="analyse-pill">Cl ' + a.chlore + '</span>');
+                    if (a.tac         != null) pills.push('<span class="analyse-pill">TAC ' + a.tac + '</span>');
+                    if (a.stabilisant != null) pills.push('<span class="analyse-pill">Stab ' + a.stabilisant + '</span>');
+                    if (a.temperature != null) pills.push('<span class="analyse-pill">' + a.temperature + '°C</span>');
+
+                    const hasDiag = !!(item.response_n8n);
+                    const safeData = encodeURIComponent(JSON.stringify(item));
+                    const statusIcon = status === 'completed' ? '✅' : (status === 'error' ? '❌' : '⏳');
 
                     html += '<div class="analyse-history-item">'
-                        + '<div class="analyse-history-meta">#' + (item.analyse_id || '-') + ' · ' + date + ' · ' + status + '</div>'
-                        + '<div class="analyse-history-values">' + pills.join('') + '</div>'
-                        + '</div>';
+                        + '<div class="analyse-history-item-header">'
+                        + '<span style="color:var(--text-muted);font-size:0.74em;">' + date + '</span>'
+                        + '<span class="analyse-history-status ' + status + '">' + statusIcon + ' ' + status + '</span>'
+                        + '</div>'
+                        + '<div class="analyse-history-values">' + (pills.join('') || '<span style="color:var(--text-muted);font-size:0.78em;">—</span>') + '</div>'
+                        + '<div class="analyse-history-actions">';
+
+                    if (hasDiag) {
+                        html += '<button class="btn-history-toggle" id="diag-btn-' + idx + '" onclick="toggleDiagHistorique(' + idx + ')">▼ Diagnostic</button>';
+                    }
+                    if (status === 'completed') {
+                        html += '<button class="btn-history-discuss" onclick="discuterDepuisHistorique(\'' + safeData.replace(/'/g, "\\'") + '\')">💬 Discuter</button>';
+                    }
+
+                    html += '</div>';
+
+                    if (hasDiag) {
+                        html += '<div class="analyse-history-diag" id="diag-hist-' + idx + '">' + escapeHtml(item.response_n8n) + '</div>';
+                    }
+
+                    html += '</div>';
                 });
                 container.innerHTML = html;
+            }
+
+            function escapeHtml(str) {
+                return String(str)
+                    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
             }
 
             function loadAnalyseHistory() {
                 const container = document.getElementById('sunny-analyse-history-list');
                 if (!container) return;
                 if (!currentPoolId) {
-                    container.innerHTML = '<div class="analyse-history-item">Aucune piscine sélectionnée.</div>';
+                    container.innerHTML = '<div class="analyse-history-item" style="color:var(--text-muted);">Aucune piscine sélectionnée.</div>';
                     return;
                 }
-
-                container.innerHTML = '<div class="analyse-history-item">Chargement...</div>';
+                container.innerHTML = '<div class="analyse-history-item" style="color:var(--text-muted);font-style:italic;">Chargement...</div>';
                 $.ajax({
                     url: ANALYSE_HISTORY_URL + '?pool_id=' + currentPoolId + '&limit=20',
                     headers: { 'X-WP-Nonce': NONCE },
                     success: function(data) {
                         if (data.success) renderAnalyseHistory(data.data || []);
-                        else container.innerHTML = '<div class="analyse-history-item">Impossible de charger l\'historique.</div>';
+                        else container.innerHTML = '<div class="analyse-history-item" style="color:var(--text-muted);">Impossible de charger l\'historique.</div>';
                     },
                     error: function() {
-                        container.innerHTML = '<div class="analyse-history-item">Erreur de chargement.</div>';
+                        container.innerHTML = '<div class="analyse-history-item" style="color:var(--text-muted);">Erreur de chargement.</div>';
                     }
                 });
             }
 
+            // ══════════════════════════════════════════════════════
+            // SOUMISSION ANALYSE — ouvre modal "en cours" + poll
+            // ══════════════════════════════════════════════════════
             window.sunnySubmitWaterAnalyse = function() {
                 if (!currentPoolId) {
                     sunnyToast('Sélectionnez une piscine avant de lancer une analyse.', 'warning');
@@ -2545,8 +3072,21 @@ function sunny_chat_shortcode() {
                     data: JSON.stringify(payload),
                     success: function(data) {
                         if (data.success) {
-                            sunnyToast('Analyse envoyée et enregistrée.', 'success');
-                            appendBubble('✅ Analyse d\'eau enregistrée (ID: ' + data.analyse_id + ').', 'system');
+                            // 1. Afficher le modal "en cours" immédiatement
+                            openAnalyseModal('pending', null);
+
+                            // 2. Lancer le polling pour attendre le résultat n8n
+                            setTimeout(function() {
+                                pollAnalyseResult(data.analyse_id, 0);
+                            }, 3000); // attendre 3s avant le 1er poll
+
+                            // 3. Feedback dans le chat
+                            appendBubble('📊 Analyse envoyée à Sunny (ID: ' + data.analyse_id + '). Le résultat s\'affichera dans une fenêtre.', 'system');
+
+                            // 4. Vider les champs d'analyse et reset les options
+                            clearAnalyseFields();
+
+                            // 5. Rafraîchir l'historique (statut pending visible)
                             loadAnalyseHistory();
                         } else {
                             sunnyToast(data.message || 'Erreur lors de l\'analyse', 'error');
@@ -2732,7 +3272,6 @@ function sunny_chat_shortcode() {
                 // Escape to close drawers
                 if (e.key === 'Escape') {
                     if (currentDrawer) sunnyCloseDrawer();
-                    sunnyCloseAttachMenu();
                 }
                 
                 // Ctrl/Cmd + Enter to send

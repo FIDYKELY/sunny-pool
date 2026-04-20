@@ -1113,38 +1113,42 @@ const alertesContextuelles = alertes.length > 0
 // ── Prompt water_analysis ─────────────────────────────
 const systemPromptAnalyse = `Tu es Sunny 🌞, expert piscine certifié. Tu reçois une analyse d'eau structurée.
 
-📋 DONNÉES DU BASSIN :
-Type : ${typePool} | Volume : ${pool.volume || '?'} m³ | Filtration : ${filtrePool} | Traitement : ${traitPool}
-Météo : Max ${maxT}°C / Min ${minT}°C / Pluie ${pluie} mm | Filtration recommandée : ${filtrationReco}
-
 🧪 MESURES DE L'EAU :
 ${analyseResume}
-${alertesContextuelles}
 
-📚 RÉFÉRENCE TECHNIQUE :
-${DOCUMENTATION_PISCINE}
+📋 CONTEXTE BASSIN :
+Type : ${typePool} | Volume : ${pool.volume || '?'} m³ | Filtration : ${filtrePool} | Traitement : ${traitPool}
+Météo : Max ${maxT}°C / Min ${minT}°C / Pluie ${pluie} mm
 
-🎯 FORMAT DE RÉPONSE OBLIGATOIRE :
-Réponds en français avec ces 4 sections exactes :
+📚 VALEURS DE RÉFÉRENCE :
+pH idéal : 7.2–7.4 | TAC idéal : 80–120 mg/L | Chlore : 1–3 mg/L | Stabilisant : 20–50 mg/L
+pH > 7.4 → chlore inefficace | Temp > 25°C → risque algues
 
-1) **Diagnostic rapide**
-   Pour chaque paramètre mesuré : valeur → état (✅ OK / ⚠️ À corriger / 🔴 Urgent) → explication courte
+🎯 FORMAT DE RÉPONSE OBLIGATOIRE — STRICT :
+Réponds UNIQUEMENT avec le diagnostic rapide, sans introduction, sans conclusion, sans autres sections.
 
-2) **Actions prioritaires** (ordre obligatoire : TAC → pH → Désinfectant)
-   Pour chaque correction : produit précis + dose calculée pour ${pool.volume || 'X'} m³ + timing
+Format exact à respecter ligne par ligne :
+- [paramètre] [valeur] [unité] → [emoji état] [label état] → [explication courte en 1 phrase]
 
-3) **Plan 24-48h**
-   Jour 1 + Jour 2 avec horaires et vérifications
+Emojis d'état :
+✅ OK → valeur dans la plage idéale
+⚠️ À corriger → valeur légèrement hors plage, à surveiller
+🔴 Urgent → valeur dangereuse, action immédiate requise
 
-4) **Résumé**
-   1 phrase simple que l'utilisateur peut retenir.
+Exemple de format attendu :
+- pH 7.8 → 🔴 Urgent → Le pH est trop élevé, le chlore devient inefficace, corriger en priorité.
+- Chlore 1.6 mg/L → ✅ OK → Niveau correct, mais compromis par le pH élevé.
+- TAC 120 mg/L → ✅ OK → À la limite haute, stable pour l'instant.
+- Stabilisant 25 mg/L → ✅ OK → Niveau correct, protège bien le chlore des UV.
+- Température 26°C → ⚠️ À corriger → Risque algues accru, augmenter la filtration.
 
-⚠️ RÈGLES :
-• Si aucune mesure fournie → demande les valeurs, ne pas inventer
-• Ordre TAC → pH → Désinfectant TOUJOURS respecté
-• pH > 7.4 → le chlore est inefficace, corriger pH EN PREMIER
-• Doses calculées pour ${pool.volume || 'X'} m³ si le volume est connu
-• Langage clair, pas de jargon inutile`;
+⚠️ RÈGLES ABSOLUES :
+- N'afficher QUE les paramètres réellement fournis dans les mesures — ne rien inventer
+- Si aucune mesure fournie → répondre uniquement : "Aucune mesure reçue. Veuillez saisir vos valeurs."
+- Pas d'introduction ("Voici l'analyse…", "Je vais analyser…")
+- Pas de conclusion, pas de plan, pas d'actions, pas de sections supplémentaires
+- Pas de numérotation de sections
+- Explication courte : 1 phrase max par paramètre, langage simple`;
 
 // ── Prompt chat_message ───────────────────────────────
 const imageContext = {
@@ -1176,6 +1180,16 @@ Tu n'es PAS un robot technique : tu sais aussi dire "salut", "merci", "bonne jou
 - Croise toujours visuel + données + météo + historique.
 - Si doute → pose 1 question courte.
 
+📁 ANALYSE DES IMAGES DE PRODUITS (PRIORITAIRE)
+Quand l'utilisateur envoie une image de produit (notice ou emballage) :
+1. 📖 LIS ATTENTIVEMENT toutes les informations visibles (dosage, concentration, marque, nom)
+2. 🔍 EXTRAIS le dosage EXACT : ex. « 200 g pour 10 m³ » ou « 1 pastille pour 30 m³ »
+3. 🎯 Réponds en utilisant CES informations spécifiques, PAS des généralités
+4. 🧮 Si dosage en ppm/mg/L/%, convertis-le pour faciliter l'application
+Exemple : Si l'image montre « Chlore choc EDG Access : 100 g pour 10 m³ », alors dis :
+   → « Pour le Chlore choc EDG Access, le dosage recommandé est 100 g pour 10 m³ de ta piscine »
+⚠️ RÈGLE ABSOLUE : Ne dis jamais « Vérifie la notice » si tu peux la lire. Lis-la et utilise-la.
+
 🧠 MÉMOIRE CONVERSATIONNELLE
 ${optHistorique ? "Tu as accès aux 20 derniers échanges ([HISTORIQUE]).\nUtilise-les pour éviter les répétitions et suivre l'évolution.\n⚠️ Ne jamais inclure le préfixe [HISTORIQUE] dans tes réponses." : "Tu n'as pas accès à l'historique de conversation."}
 
@@ -1204,6 +1218,7 @@ Produits : ${produitsTexte}${photosNote}
 Analyse : ${analyseResume}
 Météo : ${optMeteo ? ('Max ' + maxT + '°C / Min ' + minT + '°C / Pluie ' + pluie + ' mm | Filtration : ' + filtrationReco) : 'non transmise'}
 🖼️ CONTEXTE IMAGE : ${imageContext}
+
 ${alertesContextuelles}
 
 🎯 OBJECTIF FINAL
@@ -1242,14 +1257,14 @@ if (!isWaterAnalysis && optProduits && Array.isArray(wb.produits)) {
     const noticeSrc = cleanBase64(p.photo_notice_base64) || (p.photo_notice_url?.startsWith('http') ? p.photo_notice_url : null);
     if (noticeSrc) {
       hasProductImages = true;
-      imageItems.push({ type: 'text',      text: `⚠️ IMAGE PRODUIT ${num} — NOTICE : "${nom}".\nLis la notice, extrais le dosage exact (g/10m³ ou g/m³).` });
+      imageItems.push({ type: 'text',      text: `📁 IMAGE PRODUIT ${num} — NOTICE/EMBALLAGE : "${nom}"\n🔍 INSTRUCTIONS : Lis ATTENTIVEMENT cette notice/emballage et extrais :\n   • Dosage EXACT (g/10m³, g/m³, pastilles/m³, etc.)\n   • Concentration du produit\n   • Tout autre info pertinente sur l'application\nUtilise TOUJOURS ces informations spécifiques, jamais des généralités.` });
       imageItems.push({ type: 'image_url', image_url: { url: noticeSrc, detail: 'high' } });
     }
 
     const faceSrc = cleanBase64(p.photo_face_base64) || (p.photo_face_url?.startsWith('http') ? p.photo_face_url : null);
     if (faceSrc) {
       hasProductImages = true;
-      imageItems.push({ type: 'text',      text: `📸 IMAGE PRODUIT ${num} — FACE : "${nom}"${stock}` });
+      imageItems.push({ type: 'text',      text: `📸 IMAGE PRODUIT ${num} — FACE/ÉTIQUETTE : "${nom}"${stock}\n🔍 Extrais toute information de dosage ou mode d'emploi visibles sur cette face.` });
       imageItems.push({ type: 'image_url', image_url: { url: faceSrc, detail: 'high' } });
     }
   });
@@ -1261,9 +1276,44 @@ const defaultMsg = isWaterAnalysis
   : "Voici une photo de mon bassin, qu'en penses-tu ?";
 
 const userText = wb.message || defaultMsg;
-const userContent = imageItems.length > 0
-  ? [{ type: 'text', text: hasProductImages ? '🚨 Lis les notices ci-dessous en priorité.\n\n' + userText : userText }, ...imageItems]
-  : userText;
+
+// Séparer les images de produits des autres images
+const productImageIndices = [];
+imageItems.forEach((item, idx) => {
+  if (item.type === 'text' && item.text && item.text.includes('IMAGE PRODUIT')) {
+    productImageIndices.push(idx);
+    // Inclure aussi l'image qui suit si c'est une image_url
+    if (idx + 1 < imageItems.length && imageItems[idx + 1].type === 'image_url') {
+      productImageIndices.push(idx + 1);
+    }
+  }
+});
+
+const productImages = productImageIndices.map(idx => imageItems[idx]);
+const otherImages = imageItems.filter((item, idx) => !productImageIndices.includes(idx));
+
+// Construire userContent avec priorité aux images de produits
+let userContent;
+if (productImages.length > 0) {
+  userContent = [
+    { type: 'text', text: '🚨 NOTICES ET EMBALLAGES DE PRODUITS — À LIRE ET ANALYSER EN PRIORITÉ :\n' },
+    ...productImages
+  ];
+  if (userText !== defaultMsg) {
+    userContent.push({ type: 'text', text: '\nMessage utilisateur : ' + userText });
+  }
+  if (otherImages.length > 0) {
+    userContent.push({ type: 'text', text: '\nAutres images (piscine, eau, bandelette, etc.) :' });
+    userContent.push(...otherImages);
+  }
+} else if (otherImages.length > 0) {
+  userContent = [
+    { type: 'text', text: userText },
+    ...otherImages
+  ];
+} else {
+  userContent = userText;
+}
 
 // ── Messages array final ────────────────────────────────
 const messagesArray = [
