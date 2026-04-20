@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Sunny Pool App
  * Description: Gestion du dashboard piscine utilisateur avec shortcode formulaire
- * Version: 2.2
+ * Version: 2.5
  * Author: Fidy
  */
 
@@ -12,9 +12,9 @@ if (!defined('ABSPATH')) exit;
 // Exécuté à l'activation ET à chaque chargement si la version DB a changé
 register_activation_hook(__FILE__, 'sunny_pool_create_db');
 add_action('plugins_loaded', function() {
-    if (get_option('sunny_pool_db_version') !== '2.4') {
+    if (get_option('sunny_pool_db_version') !== '2.5') {
         sunny_pool_create_db();
-        update_option('sunny_pool_db_version', '2.4');
+        update_option('sunny_pool_db_version', '2.5');
     }
 });
 function sunny_pool_create_db() {
@@ -64,7 +64,33 @@ function sunny_pool_create_db() {
     ) $charset_collate;";
     dbDelta($sql_threads);
 
-    error_log('[Sunny Pool] Tables ' . $table_messages . ' et ' . $table_threads . ' créées/mises à jour (v2.3)');
+    // ── Table analyses eau (nouvelle v2.5) ────────────────────────────────
+    $table_analyses = $wpdb->prefix . 'sunny_water_analyses';
+    $sql_analyses = "CREATE TABLE $table_analyses (
+        id bigint(20) NOT NULL AUTO_INCREMENT,
+        user_id bigint(20) NOT NULL,
+        pool_id bigint(20) NOT NULL,
+        analyse_id varchar(120) NOT NULL,
+        ph decimal(5,2) DEFAULT NULL,
+        chlore decimal(6,2) DEFAULT NULL,
+        tac decimal(7,2) DEFAULT NULL,
+        stabilisant decimal(7,2) DEFAULT NULL,
+        temperature decimal(5,2) DEFAULT NULL,
+        photo_bandelette_url text DEFAULT NULL,
+        response_n8n longtext DEFAULT NULL,
+        status varchar(20) DEFAULT 'pending',
+        created_at datetime DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY analyse_id (analyse_id),
+        KEY user_id (user_id),
+        KEY pool_id (pool_id),
+        KEY status (status),
+        KEY created_at (created_at)
+    ) $charset_collate;";
+    dbDelta($sql_analyses);
+
+    error_log('[Sunny Pool] Tables ' . $table_messages . ', ' . $table_threads . ' et ' . $table_analyses . ' créées/mises à jour (v2.5)');
 }
 
 // Inclure le fichier API REST

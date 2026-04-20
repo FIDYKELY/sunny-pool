@@ -11,6 +11,9 @@ if (!defined('ABSPATH')) exit;
 if (!defined('SUNNY_N8N_WEBHOOK_URL')) {
     define('SUNNY_N8N_WEBHOOK_URL', 'https://n8n.trouvezpourmoi.com/webhook/sunny-chat');
 }
+if (!defined('SUNNY_N8N_ANALYSE_WEBHOOK_URL')) {
+    define('SUNNY_N8N_ANALYSE_WEBHOOK_URL', 'https://n8n.trouvezpourmoi.com/webhook/sunny-water-analysis');
+}
 // Clé secrète que n8n envoie dans le header X-N8N-Secret lors du callback
 if (!defined('SUNNY_N8N_CALLBACK_SECRET')) {
     define('SUNNY_N8N_CALLBACK_SECRET', 'a8F3kL9pQ2xZ7mN4rT6vW1yH5cJ8uB0s');
@@ -188,6 +191,37 @@ function sunny_pool_register_api_routes() {
                 'default' => 0,
             ]
         ]
+    ]);
+
+    // ============================================================
+    // NOUVEAU : Analyse de l'eau (mesures + historique)
+    // ============================================================
+    register_rest_route('sunny-pool/v1', '/analyse', [
+        'methods'             => 'POST',
+        'callback'            => 'sunny_pool_api_submit_water_analyse',
+        'permission_callback' => 'sunny_pool_api_check_auth',
+    ]);
+
+    register_rest_route('sunny-pool/v1', '/analyse/history', [
+        'methods'             => 'GET',
+        'callback'            => 'sunny_pool_api_get_water_analyses_history',
+        'permission_callback' => 'sunny_pool_api_check_auth',
+        'args'                => [
+            'pool_id' => [
+                'validate_callback' => function($param) { return is_numeric($param); },
+                'required' => true,
+            ],
+            'limit' => [
+                'validate_callback' => function($param) { return is_numeric($param) && intval($param) > 0 && intval($param) <= 100; },
+                'default' => 20,
+            ],
+        ],
+    ]);
+
+    register_rest_route('sunny-pool/v1', '/analyse-callback', [
+        'methods'             => 'POST',
+        'callback'            => 'sunny_pool_api_analyse_callback',
+        'permission_callback' => 'sunny_pool_api_check_callback_auth',
     ]);
 
     // ============================================================
@@ -816,6 +850,7 @@ function sunny_pool_api_chat($request) {
     $conversation_id = sanitize_text_field($params['conversation_id'] ?? '');
     $image_type      = sanitize_text_field($params['image_type'] ?? 'general');
     $thread_id_param = isset($params['thread_id']) ? intval($params['thread_id']) : 0;
+    $source          = sanitize_key($params['source'] ?? 'chat_drawer');
 
     // ── 1. Options pour contrôler quelles données sont injectées dans n8n ─
     $data_options_in = $params['data_options'] ?? [];
@@ -1039,9 +1074,11 @@ function sunny_pool_api_chat($request) {
 
     // ── 5. Payload Final (Nettoyé) ────────────────────────────────
     $n8n_payload = [
+        'type'             => 'chat_message',
         'session_id'       => $session_id,
         'conversation_id'  => $final_conversation_id,
         'callback_url'     => $callback_url,
+        'source'           => $source,
         'message'          => $message,
         'image_base64'     => $image_base64,     // base64 pur (vide si pas d'image)
         'image_type'       => $image_type,       // 'water' | 'product' | 'pool' | 'general'
@@ -1394,6 +1431,233 @@ function sunny_pool_api_get_chat_history($request) {
         'count'   => count($history_reversed),
         'data'    => $history_reversed,
     ], 200);
+}
+
+/**
+ * Soumettre une analyse d'eau (stockage + envoi n8n).
+ * POST /wp-json/sunny-pool/v1/analyse
+ */
+function sunny_pool_api_submit_water_analyse($request) {
+    global $wpdb;
+
+    $user_id = get_current_user_id();
+    $params  = $request->get_json_params();
+    $pool_id = intval($params['pool_id'] ?? 0);
+
+    if (!$pool_id || !sunny_pool_verify_pool_ownership($pool_id, $user_id)) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Piscine non trouvée ou accès refusé'], 403);
+    }
+
+    $analyse_data = isset($params['analyse']) && is_array($params['analyse']) ? $params['analyse'] : [];
+    $fields = ['ph', 'chlore', 'tac', 'stabilisant', 'temperature'];
+    $normalized = [];
+    $has_value = false;
+    foreach ($fields as $field) {
+        if (isset($analyse_data[$field]) && $analyse_data[$field] !== '') {
+            $normalized[$field] = floatval($analyse_data[$field]);
+            $has_value = true;
+        } else {
+            $normalized[$field] = null;
+        }
+    }
+
+    if (!$has_value) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Au moins une mesure est requise'], 400);
+    }
+
+    $analyse_id = 'ana-' . $user_id . '-' . $pool_id . '-' . time() . '-' . wp_rand(100, 999);
+    $photo_url = '';
+    $photo_base64_raw = $params['photo_bandelette_base64'] ?? '';
+
+    if (!empty($photo_base64_raw)) {
+        $attachment_id = sunny_pool_upload_base64_image($photo_base64_raw, $pool_id);
+        if (!is_wp_error($attachment_id)) {
+            $photo_url = wp_get_attachment_url($attachment_id);
+        }
+    }
+
+    $table_name = $wpdb->prefix . 'sunny_water_analyses';
+    $inserted = $wpdb->insert($table_name, [
+        'user_id'               => $user_id,
+        'pool_id'               => $pool_id,
+        'analyse_id'            => $analyse_id,
+        'ph'                    => $normalized['ph'],
+        'chlore'                => $normalized['chlore'],
+        'tac'                   => $normalized['tac'],
+        'stabilisant'           => $normalized['stabilisant'],
+        'temperature'           => $normalized['temperature'],
+        'photo_bandelette_url'  => $photo_url,
+        'status'                => 'pending',
+        'created_at'            => current_time('mysql'),
+    ]);
+
+    if (!$inserted) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Impossible d\'enregistrer l\'analyse'], 500);
+    }
+
+    $photo_base64_clean = '';
+    if (!empty($photo_base64_raw)) {
+        if (preg_match('/^data:image\/[^;]+;base64,(.+)$/s', $photo_base64_raw, $matches)) {
+            $photo_base64_clean = $matches[1];
+        } else {
+            $photo_base64_clean = $photo_base64_raw;
+        }
+    }
+
+    $source = sanitize_key($params['source'] ?? 'manual_form');
+
+    $payload = [
+        'type'            => 'water_analysis',
+        'analyse_id'      => $analyse_id,
+        'pool_id'         => $pool_id,
+        'user_id'         => $user_id,
+        'source'          => $source,
+        'message'         => 'Analyser mon eau à partir de ses mesures (ph, chlore, tac, stabilisant, temperature) dans l\'analyse de l\'eau',
+        'analyse'         => $normalized,
+        'photo_url'       => $photo_url,
+        'photo_base64'    => $photo_base64_clean,
+        'callback_url'    => rest_url('sunny-pool/v1/analyse-callback'),
+        'created_at'      => current_time('mysql'),
+    ];
+
+    $n8n_response = wp_remote_post(SUNNY_N8N_ANALYSE_WEBHOOK_URL, [
+        'headers' => ['Content-Type' => 'application/json'],
+        'body'    => wp_json_encode($payload),
+        'timeout' => 12,
+    ]);
+
+    if (is_wp_error($n8n_response)) {
+        error_log('[Sunny Analyse] Webhook analyse indisponible, tentative fallback sunny-chat. Erreur: ' . $n8n_response->get_error_message());
+        $n8n_response = wp_remote_post(SUNNY_N8N_WEBHOOK_URL, [
+            'headers' => ['Content-Type' => 'application/json'],
+            'body'    => wp_json_encode($payload),
+            'timeout' => 12,
+        ]);
+        if (is_wp_error($n8n_response)) {
+            $wpdb->update($table_name, ['status' => 'error'], ['analyse_id' => $analyse_id]);
+            return new WP_REST_Response([
+                'success'    => false,
+                'message'    => 'Analyse enregistrée, mais envoi n8n indisponible',
+                'analyse_id' => $analyse_id
+            ], 503);
+        }
+    }
+
+    $http_code = wp_remote_retrieve_response_code($n8n_response);
+    if ($http_code >= 400) {
+        error_log('[Sunny Analyse] Webhook analyse HTTP ' . $http_code . ', tentative fallback sunny-chat.');
+        $fallback_response = wp_remote_post(SUNNY_N8N_WEBHOOK_URL, [
+            'headers' => ['Content-Type' => 'application/json'],
+            'body'    => wp_json_encode($payload),
+            'timeout' => 12,
+        ]);
+        if (!is_wp_error($fallback_response)) {
+            $fallback_http = wp_remote_retrieve_response_code($fallback_response);
+            if ($fallback_http < 400) {
+                return new WP_REST_Response([
+                    'success'    => true,
+                    'message'    => 'Analyse envoyée avec succès',
+                    'analyse_id' => $analyse_id,
+                    'status'     => 'pending'
+                ], 201);
+            }
+        }
+
+        $wpdb->update($table_name, ['status' => 'error'], ['analyse_id' => $analyse_id]);
+        return new WP_REST_Response([
+            'success'    => false,
+            'message'    => 'Analyse enregistrée, mais n8n a répondu avec une erreur (' . $http_code . ')',
+            'analyse_id' => $analyse_id
+        ], 502);
+    }
+
+    return new WP_REST_Response([
+        'success'    => true,
+        'message'    => 'Analyse envoyée avec succès',
+        'analyse_id' => $analyse_id,
+        'status'     => 'pending'
+    ], 201);
+}
+
+/**
+ * Historique des analyses d'eau d'une piscine.
+ * GET /wp-json/sunny-pool/v1/analyse/history?pool_id=123
+ */
+function sunny_pool_api_get_water_analyses_history($request) {
+    global $wpdb;
+
+    $user_id = get_current_user_id();
+    $pool_id = intval($request->get_param('pool_id'));
+    $limit   = intval($request->get_param('limit') ?: 20);
+
+    if (!$pool_id || !sunny_pool_verify_pool_ownership($pool_id, $user_id)) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Piscine non trouvée ou accès refusé'], 403);
+    }
+
+    $table_name = $wpdb->prefix . 'sunny_water_analyses';
+    $rows = $wpdb->get_results($wpdb->prepare(
+        "SELECT * FROM $table_name WHERE user_id = %d AND pool_id = %d ORDER BY created_at DESC LIMIT %d",
+        $user_id, $pool_id, $limit
+    ), ARRAY_A);
+
+    $formatted = array_map(function($row) {
+        return [
+            'id'          => intval($row['id']),
+            'analyse_id'  => $row['analyse_id'],
+            'analyse'     => [
+                'ph'          => $row['ph'] !== null ? floatval($row['ph']) : null,
+                'chlore'      => $row['chlore'] !== null ? floatval($row['chlore']) : null,
+                'tac'         => $row['tac'] !== null ? floatval($row['tac']) : null,
+                'stabilisant' => $row['stabilisant'] !== null ? floatval($row['stabilisant']) : null,
+                'temperature' => $row['temperature'] !== null ? floatval($row['temperature']) : null,
+            ],
+            'photo_bandelette_url' => $row['photo_bandelette_url'],
+            'response_n8n'         => $row['response_n8n'],
+            'status'               => $row['status'],
+            'created_at'           => $row['created_at'],
+            'updated_at'           => $row['updated_at'],
+        ];
+    }, $rows ?: []);
+
+    return new WP_REST_Response([
+        'success' => true,
+        'count'   => count($formatted),
+        'data'    => $formatted
+    ], 200);
+}
+
+/**
+ * Callback n8n pour mise à jour de l'analyse d'eau.
+ * POST /wp-json/sunny-pool/v1/analyse-callback
+ */
+function sunny_pool_api_analyse_callback($request) {
+    global $wpdb;
+
+    $params = $request->get_json_params();
+    $analyse_id = sanitize_text_field($params['analyse_id'] ?? '');
+    $response_n8n = wp_kses_post($params['response'] ?? '');
+    $status = sanitize_text_field($params['status'] ?? 'completed');
+
+    if (empty($analyse_id)) {
+        return new WP_REST_Response(['success' => false, 'message' => 'analyse_id requis'], 400);
+    }
+
+    $table_name = $wpdb->prefix . 'sunny_water_analyses';
+    $updated = $wpdb->update(
+        $table_name,
+        [
+            'response_n8n' => $response_n8n,
+            'status'       => in_array($status, ['pending', 'completed', 'error'], true) ? $status : 'completed',
+            'updated_at'   => current_time('mysql'),
+        ],
+        ['analyse_id' => $analyse_id]
+    );
+
+    if ($updated === false) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Erreur de mise à jour'], 500);
+    }
+
+    return new WP_REST_Response(['success' => true, 'message' => 'Analyse mise à jour'], 200);
 }
 
 // ========== FONCTIONS CRUD THREADS (DISCUSSIONS) ==========

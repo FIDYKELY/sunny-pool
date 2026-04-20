@@ -680,6 +680,83 @@ function sunny_chat_shortcode() {
         box-shadow: 0 0 0 3px rgba(255,215,0,0.12);
     }
 
+    .analyse-actions {
+        margin-top: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .analyse-submit-btn {
+        border: none;
+        background: linear-gradient(135deg, #c9a43f 0%, var(--gold-light) 100%);
+        color: #1a1600;
+        padding: 10px 14px;
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        font-weight: 700;
+        font-size: 0.86em;
+        transition: all var(--transition);
+    }
+    .analyse-submit-btn:hover {
+        box-shadow: 0 4px 14px rgba(255,215,0,0.35);
+        transform: translateY(-1px);
+    }
+
+    .analyse-history {
+        margin-top: 14px;
+        border-top: 1px solid var(--gold-dim);
+        padding-top: 12px;
+    }
+
+    .analyse-history h5 {
+        margin: 0 0 10px;
+        color: var(--gold-light);
+        font-size: 0.82em;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+    }
+
+    .analyse-history-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-height: 220px;
+        overflow-y: auto;
+    }
+
+    .analyse-history-item {
+        background: rgba(255,255,255,0.03);
+        border: 1px solid var(--gold-dim);
+        border-radius: var(--radius-sm);
+        padding: 8px 10px;
+        font-size: 0.8em;
+        color: var(--text-main);
+    }
+
+    .analyse-history-meta {
+        color: var(--text-muted);
+        font-size: 0.74em;
+        margin-bottom: 6px;
+    }
+
+    .analyse-history-values {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .analyse-pill {
+        background: var(--gold-dim);
+        border: 1px solid var(--gold-border);
+        color: var(--gold-light);
+        border-radius: 20px;
+        padding: 2px 8px;
+        font-size: 0.72em;
+    }
+
     /* ── DRAWER : PRODUITS ──────────────────────────────── */
     .sunny-products-list { margin-bottom: 14px; }
 
@@ -1734,7 +1811,16 @@ function sunny_chat_shortcode() {
                 <div class="analyse-field"><label>Stabilisant (mg/L)</label><input type="number" id="ana-stabilisant" step="1" min="0" placeholder="ex: 30"></div>
                 <div class="analyse-field"><label>Température (°C)</label><input type="number" id="ana-temperature" step="0.5" min="0" max="45" placeholder="ex: 26"></div>
             </div>
-            <p style="color:var(--text-muted);font-size:0.78em;margin-top:14px;">Ces valeurs seront incluses dans votre prochain message à Sunny.</p>
+            <div class="analyse-actions">
+                <p style="color:var(--text-muted);font-size:0.78em;margin:0;">Ces valeurs sont aussi stockées dans l'historique d'analyse.</p>
+                <button type="button" class="analyse-submit-btn" onclick="sunnySubmitWaterAnalyse()">Analyser mon eau</button>
+            </div>
+            <div class="analyse-history">
+                <h5>Historique des analyses</h5>
+                <div id="sunny-analyse-history-list" class="analyse-history-list">
+                    <div class="analyse-history-item">Chargement...</div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1843,6 +1929,8 @@ function sunny_chat_shortcode() {
             const HISTORY_URL  = '<?php echo esc_url(rest_url('sunny-pool/v1/chat/history')); ?>';
             const PRODUCTS_URL = '<?php echo esc_url(rest_url('sunny-pool/v1/pool')); ?>';
             const THREADS_URL  = '<?php echo esc_url(rest_url('sunny-pool/v1/chat/threads')); ?>';
+            const ANALYSE_URL  = '<?php echo esc_url(rest_url('sunny-pool/v1/analyse')); ?>';
+            const ANALYSE_HISTORY_URL = '<?php echo esc_url(rest_url('sunny-pool/v1/analyse/history')); ?>';
 
             let currentPoolId    = <?php echo $selected_pool_id; ?>;
             let currentThreadId  = null;
@@ -1871,6 +1959,7 @@ function sunny_chat_shortcode() {
 
                 if (name === 'products') loadProducts();
                 if (name === 'threads') loadThreads();
+                if (name === 'analyse') loadAnalyseHistory();
             };
 
             window.sunnyCloseDrawer = function(silent) {
@@ -2080,6 +2169,7 @@ function sunny_chat_shortcode() {
                 currentPoolId = newPoolId;
                 currentThreadId = null;
                 loadThreads(true);
+                loadAnalyseHistory();
             });
 
             // Initial load : charger les threads puis sélectionner le plus récent
@@ -2376,6 +2466,100 @@ function sunny_chat_shortcode() {
                     }
                 });
             }
+
+            function renderAnalyseHistory(items) {
+                const container = document.getElementById('sunny-analyse-history-list');
+                if (!container) return;
+
+                if (!items || !items.length) {
+                    container.innerHTML = '<div class="analyse-history-item">Aucune analyse enregistrée.</div>';
+                    return;
+                }
+
+                let html = '';
+                items.forEach(function(item) {
+                    const date = item.created_at ? new Date(item.created_at.replace(' ', 'T')).toLocaleString('fr-FR') : '-';
+                    const status = item.status || 'pending';
+                    const a = item.analyse || {};
+
+                    const pills = [];
+                    if (a.ph !== null && a.ph !== undefined) pills.push('<span class="analyse-pill">pH: ' + a.ph + '</span>');
+                    if (a.chlore !== null && a.chlore !== undefined) pills.push('<span class="analyse-pill">Cl: ' + a.chlore + '</span>');
+                    if (a.tac !== null && a.tac !== undefined) pills.push('<span class="analyse-pill">TAC: ' + a.tac + '</span>');
+                    if (a.stabilisant !== null && a.stabilisant !== undefined) pills.push('<span class="analyse-pill">Stab: ' + a.stabilisant + '</span>');
+                    if (a.temperature !== null && a.temperature !== undefined) pills.push('<span class="analyse-pill">Temp: ' + a.temperature + '°C</span>');
+
+                    html += '<div class="analyse-history-item">'
+                        + '<div class="analyse-history-meta">#' + (item.analyse_id || '-') + ' · ' + date + ' · ' + status + '</div>'
+                        + '<div class="analyse-history-values">' + pills.join('') + '</div>'
+                        + '</div>';
+                });
+                container.innerHTML = html;
+            }
+
+            function loadAnalyseHistory() {
+                const container = document.getElementById('sunny-analyse-history-list');
+                if (!container) return;
+                if (!currentPoolId) {
+                    container.innerHTML = '<div class="analyse-history-item">Aucune piscine sélectionnée.</div>';
+                    return;
+                }
+
+                container.innerHTML = '<div class="analyse-history-item">Chargement...</div>';
+                $.ajax({
+                    url: ANALYSE_HISTORY_URL + '?pool_id=' + currentPoolId + '&limit=20',
+                    headers: { 'X-WP-Nonce': NONCE },
+                    success: function(data) {
+                        if (data.success) renderAnalyseHistory(data.data || []);
+                        else container.innerHTML = '<div class="analyse-history-item">Impossible de charger l\'historique.</div>';
+                    },
+                    error: function() {
+                        container.innerHTML = '<div class="analyse-history-item">Erreur de chargement.</div>';
+                    }
+                });
+            }
+
+            window.sunnySubmitWaterAnalyse = function() {
+                if (!currentPoolId) {
+                    sunnyToast('Sélectionnez une piscine avant de lancer une analyse.', 'warning');
+                    return;
+                }
+
+                const analyse = buildAnalyse();
+                if (!Object.keys(analyse).length) {
+                    sunnyToast('Saisissez au moins une mesure (pH, chlore, TAC, stabilisant, température).', 'warning');
+                    return;
+                }
+
+                const payload = {
+                    pool_id: currentPoolId,
+                    analyse: analyse,
+                    photo_bandelette_base64: currentImageType === 'water' ? imageBase64 : null
+                };
+
+                $.ajax({
+                    url: ANALYSE_URL,
+                    method: 'POST',
+                    contentType: 'application/json',
+                    headers: { 'X-WP-Nonce': NONCE },
+                    data: JSON.stringify(payload),
+                    success: function(data) {
+                        if (data.success) {
+                            sunnyToast('Analyse envoyée et enregistrée.', 'success');
+                            appendBubble('✅ Analyse d\'eau enregistrée (ID: ' + data.analyse_id + ').', 'system');
+                            loadAnalyseHistory();
+                        } else {
+                            sunnyToast(data.message || 'Erreur lors de l\'analyse', 'error');
+                        }
+                    },
+                    error: function(xhr) {
+                        const msg = (xhr.responseJSON && xhr.responseJSON.message)
+                            ? xhr.responseJSON.message
+                            : ('Erreur analyse (' + xhr.status + ')');
+                        sunnyToast(msg, 'error');
+                    }
+                });
+            };
 
             function pollForResponse(convId, typingEl, attempts) {
                 const maxAttempts = 60;
