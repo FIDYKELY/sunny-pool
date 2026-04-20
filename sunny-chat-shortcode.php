@@ -80,6 +80,37 @@ function sunny_chat_shortcode() {
         box-sizing: border-box;
     }
 
+    /* Fix pour les emojis (si remplacés par WP Twemoji) */
+    .sunny-chat-wrapper img.emoji {
+        display: inline-block !important;
+        height: 1em !important;
+        width: 1em !important;
+        margin: 0 .07em !important;
+        vertical-align: -0.1em !important;
+        background: none !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+        border: none !important;
+    }
+
+    /* Forcer Select2 à ne pas écraser l'affichage (fallback) */
+    .sunny-pool-selector-wrap select.select2-hidden-accessible,
+    .sunny-drawer-body select.select2-hidden-accessible {
+        clip: auto !important;
+        clip-path: none !important;
+        -webkit-clip-path: none !important;
+        height: auto !important;
+        overflow: visible !important;
+        position: static !important;
+        width: auto !important;
+        white-space: normal !important;
+        border: 1px solid var(--gold-border) !important;
+    }
+    .sunny-pool-selector-wrap .select2-container,
+    .sunny-drawer-body .select2-container {
+        display: none !important;
+    }
+
     /* ── WRAPPER ──────────────────────────────────────────── */
     .sunny-chat-wrapper {
         font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
@@ -269,6 +300,16 @@ function sunny_chat_shortcode() {
         transition: all var(--transition);
         position: relative;
         overflow: hidden;
+    }
+
+    .sunny-hdr-btn::after,
+    .sunny-attach-btn::after,
+    .sunny-thread-action-btn::after {
+        content: attr(data-emoji);
+        font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif !important;
+        font-style: normal;
+        font-weight: normal;
+        pointer-events: none;
     }
 
     .sunny-hdr-btn::before {
@@ -1971,7 +2012,7 @@ function sunny_chat_shortcode() {
                 <span class="sunny-thread-indicator" id="sunny-thread-indicator" onclick="sunnyOpenDrawer('threads')" title="Discussion en cours">💬 Nouvelle discussion</span>
                 <?php if (count($pools) > 1) : ?>
                 <div class="sunny-pool-selector-wrap">
-                    <select id="sunny-pool-selector">
+                    <select id="sunny-pool-selector" class="no-select2 ignore-select2 wpo-select2-ignore">
                         <?php foreach ($pools as $pool) :
                             $vol = get_field('volume', $pool->ID);
                         ?>
@@ -1987,10 +2028,10 @@ function sunny_chat_shortcode() {
             </div>
         </div>
         <div class="sunny-header-actions">
-            <button class="sunny-hdr-btn" id="hdr-threads-btn" onclick="sunnyOpenDrawer('threads')" title="Mes discussions">💬</button>
-            <button class="sunny-hdr-btn" id="hdr-analyse-btn" onclick="sunnyOpenDrawer('analyse')" title="Mesures d'eau">📊</button>
-            <button class="sunny-hdr-btn" id="hdr-products-btn" onclick="sunnyOpenDrawer('products')" title="Mes produits">🧴</button>
-            <button class="sunny-hdr-btn" id="hdr-options-btn" onclick="sunnyOpenDrawer('options')" title="Options">⚙️</button>
+            <button class="sunny-hdr-btn" id="hdr-threads-btn" onclick="sunnyOpenDrawer('threads')" title="Mes discussions" data-emoji="💬"></button>
+            <button class="sunny-hdr-btn" id="hdr-analyse-btn" onclick="sunnyOpenDrawer('analyse')" title="Mesures d'eau" data-emoji="📊"></button>
+            <button class="sunny-hdr-btn" id="hdr-products-btn" onclick="sunnyOpenDrawer('products')" title="Mes produits" data-emoji="🧴"></button>
+            <button class="sunny-hdr-btn" id="hdr-options-btn" onclick="sunnyOpenDrawer('options')" title="Options" data-emoji="⚙️"></button>
         </div>
     </div>
 
@@ -2029,9 +2070,7 @@ function sunny_chat_shortcode() {
         <!-- Unified input row -->
         <div class="sunny-input-unified">
             <!-- Attachment button -->
-            <button class="sunny-attach-btn" id="sunny-attach-btn" onclick="document.getElementById('sunny-image-file').click();" title="Ajouter une photo">
-                📎
-            </button>
+            <button class="sunny-attach-btn" id="sunny-attach-btn" onclick="document.getElementById('sunny-image-file').click();" title="Ajouter une photo" data-emoji="📎"></button>
 
             <textarea id="sunny-input"
                 placeholder="Posez votre question à Sunny…"
@@ -2090,7 +2129,7 @@ function sunny_chat_shortcode() {
             </div>
             <div class="sunny-product-add-form">
                 <div class="product-form-row">
-                    <select id="product-categorie" style="flex:1.5">
+                    <select id="product-categorie" class="no-select2 ignore-select2" style="flex:1.5">
                         <option value="">Catégorie...</option>
                         <option value="chlore_choc">Chlore choc</option>
                         <option value="chlore_lent">Chlore lent</option>
@@ -2107,7 +2146,7 @@ function sunny_chat_shortcode() {
                 </div>
                 <div class="product-form-row">
                     <input type="number" id="product-quantity" placeholder="Qté" step="0.1" min="0" style="width:80px">
-                    <select id="product-unit" style="width:90px">
+                    <select id="product-unit" class="no-select2 ignore-select2" style="width:90px">
                         <option value="L">L</option>
                         <option value="kg">kg</option>
                         <option value="g">g</option>
@@ -2193,6 +2232,22 @@ function sunny_chat_shortcode() {
             let currentDrawer    = null;
 
             const msgsContainer = document.getElementById('sunny-messages');
+
+            // --- Disable Select2 ---
+            function killSelect2() {
+                if (typeof $.fn.select2 !== 'undefined') {
+                    $('#sunny-pool-selector, #product-categorie, #product-unit').each(function() {
+                        var $s = $(this);
+                        if ($s.hasClass('select2-hidden-accessible')) {
+                            try { $s.select2('destroy'); $s.removeClass('select2-hidden-accessible'); } catch (e) {}
+                        }
+                    });
+                }
+            }
+            // Some themes initialize async
+            setTimeout(killSelect2, 50);
+            setTimeout(killSelect2, 400);
+            setTimeout(killSelect2, 1200);
 
             // ── DRAWER SYSTEM ────────────────────────────────────────
             window.sunnyOpenDrawer = function(name) {
@@ -2313,8 +2368,8 @@ function sunny_chat_shortcode() {
                         + (t.message_count > 0 ? '<span class="sunny-thread-badge">' + t.message_count + ' msg</span>' : '')
                         + '</div></div>'
                         + '<div class="sunny-thread-actions" onclick="event.stopPropagation()">'
-                        + '<button class="sunny-thread-action-btn" onclick="sunnyRenameThread(' + t.id + ', \'' + safeTitle + '\')" title="Renommer">✏️</button>'
-                        + '<button class="sunny-thread-action-btn delete" onclick="sunnyDeleteThread(' + t.id + ')" title="Supprimer">🗑️</button>'
+                        + '<button class="sunny-thread-action-btn" onclick="sunnyRenameThread(' + t.id + ', \'' + safeTitle + '\')" title="Renommer" data-emoji="✏️"></button>'
+                        + '<button class="sunny-thread-action-btn delete" onclick="sunnyDeleteThread(' + t.id + ')" title="Supprimer" data-emoji="🗑️"></button>'
                         + '</div></div>';
                 });
                 list.innerHTML = html;

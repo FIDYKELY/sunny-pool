@@ -1239,6 +1239,14 @@ function sunny_pool_save_chat_message($user_id, $pool_id, $message, $response, $
  */
 function sunny_pool_api_chat_callback($request) {
     global $wpdb;
+
+    // ── Vérifier le secret n8n ────────────────────────────────────
+    $secret = $request->get_header('X-N8N-Secret');
+    if (empty($secret) || $secret !== SUNNY_N8N_CALLBACK_SECRET) {
+        error_log('[Sunny Pool] Callback chat : secret invalide ou manquant');
+        return new WP_REST_Response(['success' => false, 'message' => 'Unauthorized'], 401);
+    }
+
     $params = $request->get_json_params();
 
     $conversation_id  = sanitize_text_field($params['conversation_id'] ?? '');
@@ -1632,6 +1640,13 @@ function sunny_pool_api_get_water_analyses_history($request) {
  */
 function sunny_pool_api_analyse_callback($request) {
     global $wpdb;
+
+    // ── Vérifier le secret n8n ────────────────────────────────────
+    $secret = $request->get_header('X-N8N-Secret');
+    if (empty($secret) || $secret !== SUNNY_N8N_CALLBACK_SECRET) {
+        error_log('[Sunny Pool] Callback analyse : secret invalide ou manquant');
+        return new WP_REST_Response(['success' => false, 'message' => 'Unauthorized'], 401);
+    }
 
     $params = $request->get_json_params();
     $analyse_id = sanitize_text_field($params['analyse_id'] ?? '');
