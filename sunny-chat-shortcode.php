@@ -11,7 +11,13 @@ add_shortcode('sunny_chat', 'sunny_chat_shortcode');
 
 function sunny_chat_shortcode() {
     if (!is_user_logged_in()) {
-        return '<p style="color:#d4af37;">Veuillez vous <a href="' . wp_login_url(get_permalink()) . '" style="color:#ffd700;">connecter</a> pour parler à Sunny.</p>';
+         $login_url = home_url('/connexion/') . '?redirect_to=' . urlencode(get_permalink());
+        $signup_url = home_url('/register/');
+        return '<div style="text-align:center;padding:40px 20px;">'
+             . '<p style="color:#d4af37;font-size:1.1em;font-weight:600;">Connectez-vous pour parler à Sunny 🌞</p>'
+             . '<p><a href="' . esc_url($login_url) . '" style="display:inline-block;padding:12px 28px;background:#d4af37;color:#1a1600;border-radius:10px;text-decoration:none;font-weight:700;">Se connecter</a></p>'
+             . '<p style="color:#94a3b8;font-size:0.9em;margin-top:16px;">Pas encore de compte ? <a href="' . esc_url($signup_url) . '" style="color:#eab308;">Créer un abonnement</a></p>'
+             . '</div>';
     }
 
     $user_id = get_current_user_id();
@@ -48,1954 +54,1728 @@ function sunny_chat_shortcode() {
     ?>
     <div class="sunny-chat-wrapper" id="sunny-chat-root">
 
+    <!-- ===== EXTERNAL RESOURCES ===== -->
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+
     <!-- ===== STYLES ===== -->
     <style>
-    /* ── RESET & VARIABLES ─────────────────────────────────── */
+    /* ════════════════════════════════════════════════════════════
+       SUNNY CHAT — REFONTE UX/UI v3.0
+       Layout 100dvh · Glassmorphism · Micro-interactions
+       ════════════════════════════════════════════════════════════ */
+
     :root {
-        --gold:        #d4af37;
-        --gold-light:  #ffd700;
-        --gold-dim:    rgba(212,175,55,0.18);
-        --gold-border: rgba(212,175,55,0.35);
-        --gold-glow:   rgba(212,175,55,0.4);
-        --bg-deep:     #111317;
-        --bg-card:     #1c1f26;
-        --bg-input:    #232730;
-        --text-main:   #eef0f5;
-        --text-muted:  #8a8f9e;
-        --radius-lg:   18px;
-        --radius-md:   12px;
-        --radius-sm:   8px;
-        --radius-xl:   24px;
-        --shadow-gold: 0 0 28px rgba(212,175,55,0.18);
-        --shadow-soft: 0 4px 24px rgba(0,0,0,0.4);
-        --shadow-lift: 0 8px 32px rgba(0,0,0,0.5);
-        --transition:  0.22s cubic-bezier(.4,0,.2,1);
-        --transition-bounce: 0.4s cubic-bezier(0.68,-0.55,0.265,1.55);
-        --safe-bottom: env(safe-area-inset-bottom, 0px);
+        --gold:         #d4af37;
+        --gold-light:   #ffd700;
+        --gold-soft:    #f5d76e;
+        --gold-dim:     rgba(212, 175, 55, 0.18);
+        --gold-border:  rgba(212, 175, 55, 0.32);
+        --gold-glow:    rgba(212, 175, 55, 0.45);
+
+        --bg-deep:      #0b0d12;
+        --bg-mid:       #14171f;
+        --bg-card:      #1a1e28;
+        --bg-elevated:  #21262f;
+        --bg-input:     #232730;
+
+        --surface-1:    rgba(255, 255, 255, 0.04);
+        --surface-2:    rgba(255, 255, 255, 0.06);
+        --surface-3:    rgba(255, 255, 255, 0.08);
+
+        --glass-bg:     rgba(20, 23, 31, 0.72);
+        --glass-border: rgba(255, 255, 255, 0.08);
+        --glass-blur:   saturate(180%) blur(22px);
+
+        --text-main:    #eef0f5;
+        --text-muted:   #8a8f9e;
+        --text-faint:   #5d6271;
+
+        --user-grad:    linear-gradient(135deg, #d4af37 0%, #b8941f 100%);
+        --sunny-grad:   linear-gradient(160deg, rgba(212,175,55,0.10) 0%, rgba(212,175,55,0.04) 100%);
+        --header-grad:  linear-gradient(180deg, rgba(11,13,18,0.92) 0%, rgba(11,13,18,0.78) 100%);
+
+        --radius-sm:    8px;
+        --radius:       14px;
+        --radius-lg:    20px;
+        --radius-xl:    28px;
+
+        --shadow-sm:    0 2px 8px rgba(0,0,0,0.25);
+        --shadow:       0 8px 24px rgba(0,0,0,0.35);
+        --shadow-lg:    0 16px 48px rgba(0,0,0,0.45);
+        --shadow-gold:  0 8px 32px rgba(212,175,55,0.25);
+
+        --ease:         cubic-bezier(0.4, 0, 0.2, 1);
+        --ease-spring:  cubic-bezier(0.34, 1.56, 0.64, 1);
+        --t-fast:       150ms;
+        --t-base:       240ms;
+        --t-slow:       420ms;
+
+        --header-h:     64px;
+        --sidebar-w:    72px;
+        --sidebar-expanded-w: 260px;
+        --mobilenav-h:  60px;
     }
 
-    .sunny-chat-wrapper *,
-    .sunny-chat-wrapper *::before,
-    .sunny-chat-wrapper *::after {
+    /* ── RESET SCOPÉ ───────────────────────────────────────────── */
+    .sunny-chat-wrapper, .sunny-chat-wrapper *,
+    .sunny-chat-wrapper *::before, .sunny-chat-wrapper *::after {
         box-sizing: border-box;
     }
 
-    /* Fix pour les emojis (si remplacés par WP Twemoji) */
-    .sunny-chat-wrapper img.emoji {
-        display: inline-block !important;
-        height: 1em !important;
-        width: 1em !important;
-        margin: 0 .07em !important;
-        vertical-align: -0.1em !important;
-        background: none !important;
-        padding: 0 !important;
-        box-shadow: none !important;
-        border: none !important;
-    }
-
-    /* Forcer Select2 à ne pas écraser l'affichage (fallback) */
-    .sunny-pool-selector-wrap select.select2-hidden-accessible,
-    .sunny-drawer-body select.select2-hidden-accessible {
-        clip: auto !important;
-        clip-path: none !important;
-        -webkit-clip-path: none !important;
-        height: auto !important;
-        overflow: visible !important;
-        position: static !important;
-        width: auto !important;
-        white-space: normal !important;
-        border: 1px solid var(--gold-border) !important;
-    }
-    .sunny-pool-selector-wrap .select2-container,
-    .sunny-drawer-body .select2-container {
-        display: none !important;
-    }
-
-    /* ── WRAPPER ──────────────────────────────────────────── */
     .sunny-chat-wrapper {
-        font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-        max-width: 900px;
-        margin: 20px auto;
-        position: relative;
-        border-radius: var(--radius-xl);
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        height: 100dvh;
         overflow: hidden;
-        background: linear-gradient(145deg, var(--bg-deep) 0%, #0d0f12 100%);
-        box-shadow: 
-            0 20px 60px rgba(0,0,0,0.6),
-            0 0 0 1px var(--gold-border),
-            inset 0 1px 0 rgba(255,255,255,0.05);
-        animation: wrapper-enter 0.6s var(--transition) both;
-        will-change: transform, opacity;
+        font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-size: 15px;
+        line-height: 1.55;
+        color: var(--text-main);
+        background:
+            radial-gradient(ellipse 80% 60% at 20% 0%, rgba(212,175,55,0.08), transparent 60%),
+            radial-gradient(ellipse 60% 50% at 100% 100%, rgba(212,175,55,0.05), transparent 60%),
+            linear-gradient(180deg, var(--bg-deep) 0%, #07080b 100%);
+        display: grid;
+        grid-template-columns: var(--sidebar-w) 1fr;
+        grid-template-rows: var(--header-h) 1fr;
+        grid-template-areas:
+            "sidebar header"
+            "sidebar main";
+        z-index: 9999;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
     }
 
-    @keyframes wrapper-enter {
-        from { 
-            opacity: 0; 
-            transform: translateY(20px) scale(0.98);
-            box-shadow: 0 0 0 rgba(0,0,0,0);
-        }
-        to { 
-            opacity: 1; 
-            transform: translateY(0) scale(1);
-            box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 0 1px var(--gold-border), inset 0 1px 0 rgba(255,255,255,0.05);
-        }
+    /* Décor : halos lumineux animés */
+    .sunny-chat-wrapper::before,
+    .sunny-chat-wrapper::after {
+        content: '';
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(80px);
+        opacity: 0.35;
+        pointer-events: none;
+        z-index: 0;
+        animation: float-orb 18s var(--ease) infinite;
+    }
+    .sunny-chat-wrapper::before {
+        width: 420px; height: 420px;
+        background: radial-gradient(circle, rgba(212,175,55,0.4), transparent 70%);
+        top: -100px; left: 10%;
+    }
+    .sunny-chat-wrapper::after {
+        width: 360px; height: 360px;
+        background: radial-gradient(circle, rgba(80,120,200,0.25), transparent 70%);
+        bottom: -120px; right: 15%;
+        animation-delay: -9s;
     }
 
-    /* Skeleton loading animation */
-    @keyframes shimmer {
-        0% { background-position: -200% 0; }
-        100% { background-position: 200% 0; }
+    @keyframes float-orb {
+        0%, 100% { transform: translate(0,0) scale(1); }
+        50%      { transform: translate(40px,30px) scale(1.1); }
     }
 
-    .sunny-skeleton {
-        background: linear-gradient(90deg, var(--bg-card) 25%, rgba(212,175,55,0.1) 50%, var(--bg-card) 75%);
-        background-size: 200% 100%;
-        animation: shimmer 1.5s infinite;
+    /* ── SIDEBAR (Desktop) — ChatGPT-style toggle ─────────────── */
+    .sunny-sidebar {
+        grid-area: sidebar;
+        background: var(--glass-bg);
+        backdrop-filter: var(--glass-blur);
+        -webkit-backdrop-filter: var(--glass-blur);
+        border-right: 1px solid var(--glass-border);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 12px 8px;
+        gap: 8px;
+        z-index: 10;
+        position: relative;
+        width: var(--sidebar-w);
+        transition: width var(--t-slow) var(--ease);
+        overflow: hidden;
+    }
+    .sunny-sidebar.expanded {
+        width: var(--sidebar-expanded-w);
+        align-items: stretch;
+        padding: 12px 12px;
+    }
+
+    /* Toggle button */
+    .sunny-sidebar-toggle {
+        width: 40px; height: 40px;
+        border: none;
         border-radius: var(--radius-sm);
+        background: var(--surface-2);
+        color: var(--text-muted);
+        cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        transition: all var(--t-fast) var(--ease);
+        flex-shrink: 0;
+        align-self: center;
+    }
+    .sunny-sidebar.expanded .sunny-sidebar-toggle { align-self: flex-end; }
+    .sunny-sidebar-toggle:hover { background: var(--surface-3); color: var(--text-main); }
+    .sunny-sidebar-toggle .material-symbols-outlined { font-size: 22px; transition: transform var(--t-base) var(--ease); }
+    .sunny-sidebar.expanded .sunny-sidebar-toggle .material-symbols-outlined { transform: rotate(180deg); }
+
+    .sunny-sidebar-btn {
+        width: 48px; height: 48px;
+        border: none;
+        border-radius: var(--radius);
+        background: var(--user-grad);
+        color: #1a1410;
+        font-size: 0;
+        cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: var(--shadow-gold);
+        transition: transform var(--t-base) var(--ease-spring), box-shadow var(--t-base) var(--ease), width var(--t-slow) var(--ease);
+        flex-shrink: 0;
+    }
+    .sunny-sidebar.expanded .sunny-sidebar-btn {
+        width: 100%; height: 44px;
+        font-size: 13px;
+        gap: 8px;
+        justify-content: flex-start;
+        padding: 0 14px;
+    }
+    .sunny-sidebar-btn:hover { transform: scale(1.04); }
+    .sunny-sidebar-btn:active { transform: scale(0.97); }
+    .sunny-sidebar-btn .material-symbols-outlined { font-size: 22px; flex-shrink: 0; }
+    .sunny-sidebar.expanded .sunny-sidebar-btn .sidebar-label { display: inline; font-weight: 700; }
+    .sunny-sidebar-btn .sidebar-label { display: none; }
+
+    .sunny-sidebar-nav {
+        display: flex; flex-direction: column;
+        gap: 2px;
+        flex: 1;
+        margin-top: 8px;
+        width: 100%;
     }
 
-    /* ── HEADER ───────────────────────────────────────────── */
+    .sunny-sidebar-link, .sunny-sidebar-footer .sunny-sidebar-link {
+        width: 48px; height: 44px;
+        border: none;
+        border-radius: var(--radius-sm);
+        background: transparent;
+        color: var(--text-muted);
+        cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 0;
+        position: relative;
+        gap: 0;
+        padding: 0;
+        transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease), width var(--t-slow) var(--ease);
+        flex-shrink: 0;
+        text-decoration: none;
+    }
+    .sunny-sidebar.expanded .sunny-sidebar-link {
+        width: 100%; height: 42px;
+        font-size: 13px;
+        gap: 10px;
+        justify-content: flex-start;
+        padding: 0 14px;
+    }
+    /* Tooltip (collapsed only) */
+    .sunny-sidebar-link::after {
+        content: attr(data-tooltip, '');
+        position: absolute;
+        left: calc(100% + 12px);
+        top: 50%;
+        transform: translateY(-50%) translateX(-4px);
+        background: var(--bg-elevated);
+        color: var(--text-main);
+        font-size: 12px;
+        padding: 6px 10px;
+        border-radius: 6px;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity var(--t-fast), transform var(--t-fast);
+        box-shadow: var(--shadow);
+        z-index: 100;
+    }
+    .sunny-sidebar.expanded .sunny-sidebar-link::after { display: none; }
+    .sunny-sidebar-link:hover {
+        background: var(--surface-2);
+        color: var(--gold-light);
+    }
+    .sunny-sidebar-link:hover::after {
+        opacity: 1;
+        transform: translateY(-50%) translateX(0);
+    }
+    .sunny-sidebar-link .material-symbols-outlined { font-size: 22px; flex-shrink: 0; }
+    .sunny-sidebar-link .sidebar-label { display: none; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sunny-sidebar.expanded .sunny-sidebar-link .sidebar-label { display: inline; }
+
+    /* Sidebar section dividers */
+    .sunny-sidebar-divider {
+        width: 32px; height: 1px;
+        background: var(--glass-border);
+        margin: 6px auto;
+        transition: width var(--t-slow) var(--ease);
+    }
+    .sunny-sidebar.expanded .sunny-sidebar-divider { width: 100%; }
+
+    /* Sidebar section label */
+    .sunny-sidebar-section-label {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        color: var(--text-faint);
+        padding: 8px 14px 4px;
+        display: none;
+    }
+    .sunny-sidebar.expanded .sunny-sidebar-section-label { display: block; }
+
+    /* Sidebar footer */
+    .sunny-sidebar-footer {
+        display: flex; flex-direction: column;
+        gap: 2px;
+        width: 100%;
+        padding-top: 8px;
+        border-top: 1px solid var(--glass-border);
+        margin-top: 4px;
+    }
+
+    /* Logout button */
+    .sunny-sidebar-logout {
+        width: 48px; height: 42px;
+        border: none;
+        border-radius: var(--radius-sm);
+        background: transparent;
+        color: var(--text-muted);
+        cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 0;
+        gap: 0;
+        padding: 0;
+        transition: all var(--t-fast) var(--ease);
+        text-decoration: none;
+    }
+    .sunny-sidebar.expanded .sunny-sidebar-logout {
+        width: 100%; height: 42px;
+        font-size: 13px;
+        gap: 10px;
+        justify-content: flex-start;
+        padding: 0 14px;
+    }
+    .sunny-sidebar-logout:hover { background: rgba(255,94,94,0.12); color: #ff8585; }
+    .sunny-sidebar-logout .material-symbols-outlined { font-size: 22px; flex-shrink: 0; }
+    .sunny-sidebar-logout .sidebar-label { display: none; font-weight: 500; }
+    .sunny-sidebar.expanded .sunny-sidebar-logout .sidebar-label { display: inline; }
+
+    /* ── HEADER ─────────────────────────────────────────────────── */
     .sunny-chat-header {
-        background: linear-gradient(135deg, rgba(25,28,35,0.95) 0%, rgba(34,38,47,0.98) 100%);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        border-bottom: 1px solid var(--gold-border);
-        padding: 14px 18px;
+        grid-area: header;
         display: flex;
         align-items: center;
-        gap: 12px;
-        position: relative;
+        gap: 14px;
+        padding: 0 20px;
+        background: var(--header-grad);
+        backdrop-filter: var(--glass-blur);
+        -webkit-backdrop-filter: var(--glass-blur);
+        border-bottom: 1px solid var(--glass-border);
         z-index: 10;
+        position: relative;
     }
 
     .sunny-avatar {
-        width: 46px; height: 46px;
-        background: linear-gradient(135deg, #c9a43f 0%, var(--gold-light) 50%, #b8942c 100%);
+        width: 42px; height: 42px;
         border-radius: 50%;
+        background: var(--user-grad);
         display: flex; align-items: center; justify-content: center;
-        font-size: 1.4em;
+        font-size: 22px;
         flex-shrink: 0;
-        box-shadow: 
-            0 0 0 2px var(--bg-deep),
-            0 0 20px rgba(212,175,55,0.4),
-            inset 0 2px 4px rgba(255,255,255,0.3);
-        animation: avatar-pulse 3s ease-in-out infinite;
-        position: relative;
+        box-shadow: 0 0 0 2px rgba(11,13,18,0.9), 0 0 0 3px var(--gold-border), 0 0 20px var(--gold-glow);
+        animation: avatar-pulse 3s var(--ease) infinite;
     }
-
-    .sunny-avatar::after {
-        content: '';
-        position: absolute;
-        inset: -3px;
-        border-radius: 50%;
-        background: conic-gradient(from 0deg, transparent, var(--gold), transparent);
-        animation: rotate 3s linear infinite;
-        z-index: -1;
-        opacity: 0.6;
-    }
-
-    @keyframes rotate {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
-    }
-
     @keyframes avatar-pulse {
-        0%, 100% { box-shadow: 0 0 0 2px var(--bg-deep), 0 0 20px rgba(212,175,55,0.4), inset 0 2px 4px rgba(255,255,255,0.3); }
-        50% { box-shadow: 0 0 0 2px var(--bg-deep), 0 0 30px rgba(212,175,55,0.6), inset 0 2px 4px rgba(255,255,255,0.3); }
+        0%, 100% { box-shadow: 0 0 0 2px rgba(11,13,18,0.9), 0 0 0 3px var(--gold-border), 0 0 20px var(--gold-glow); }
+        50%      { box-shadow: 0 0 0 2px rgba(11,13,18,0.9), 0 0 0 3px var(--gold-border), 0 0 32px var(--gold-glow); }
     }
 
-    .sunny-header-info { flex: 1; min-width: 0; }
-
-    .sunny-chat-header h3 {
-        color: var(--gold-light);
-        margin: 0 0 3px;
-        font-size: 1em;
-        font-weight: 700;
-        letter-spacing: 0.3px;
-        text-shadow: 0 1px 2px rgba(0,0,0,0.3);
-    }
-
-    .sunny-status-row {
+    .sunny-header-info {
+        flex: 1;
+        min-width: 0;
         display: flex;
-        align-items: center;
-        gap: 6px;
+        flex-direction: column;
+        justify-content: center;
+    }
+    .sunny-header-info h3 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--text-main);
+        letter-spacing: -0.01em;
+        line-height: 1.2;
+    }
+    .sunny-status-row {
+        display: flex; align-items: center; gap: 8px;
+        margin-top: 2px;
         flex-wrap: wrap;
     }
-
-    .sunny-status-dot {
-        width: 8px; height: 8px;
-        background: linear-gradient(135deg, #2ecc71, #27ae60);
-        border-radius: 50%;
-        flex-shrink: 0;
-        box-shadow: 0 0 8px rgba(46,204,113,0.6);
-        animation: pulse-dot 2s ease-in-out infinite;
-        position: relative;
-    }
-
-    .sunny-status-dot::after {
-        content: '';
-        position: absolute;
-        inset: -2px;
-        border-radius: 50%;
-        background: transparent;
-        border: 1px solid rgba(46,204,113,0.3);
-        animation: pulse-ring 2s ease-out infinite;
-    }
-
-    @keyframes pulse-dot {
-        0%, 100% { transform: scale(1); opacity: 1; }
-        50% { transform: scale(0.85); opacity: 0.8; }
-    }
-
-    @keyframes pulse-ring {
-        0% { transform: scale(1); opacity: 1; }
-        100% { transform: scale(2.5); opacity: 0; }
-    }
-
     .sunny-status-text {
+        font-size: 12px;
         color: var(--text-muted);
-        font-size: 0.78em;
-        font-weight: 500;
+        transition: color var(--t-fast);
     }
-
-    .sunny-pool-selector-wrap {
-        display: flex; align-items: center; gap: 6px;
-    }
+    .sunny-status-text:hover { color: var(--gold-light); }
 
     .sunny-pool-selector-wrap select {
-        background: rgba(255,255,255,0.05);
-        border: 1px solid var(--gold-border);
-        color: var(--gold);
-        border-radius: var(--radius-sm);
-        padding: 5px 28px 5px 10px;
-        font-size: 0.8em;
+        background: var(--surface-2);
+        border: 1px solid var(--glass-border);
+        color: var(--text-main);
+        font-size: 12px;
+        padding: 4px 10px;
+        border-radius: 999px;
         cursor: pointer;
-        max-width: 180px;
-        appearance: none;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23d4af37' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-        background-repeat: no-repeat;
-        background-position: right 8px center;
-        transition: all var(--transition);
+        font-family: inherit;
+        transition: all var(--t-fast) var(--ease);
     }
-
-    .sunny-pool-selector-wrap select:hover,
+    .sunny-pool-selector-wrap select:hover {
+        background: var(--surface-3);
+        border-color: var(--gold-border);
+    }
     .sunny-pool-selector-wrap select:focus {
-        background: rgba(255,255,255,0.1);
-        border-color: var(--gold-light);
         outline: none;
+        border-color: var(--gold);
+        box-shadow: 0 0 0 3px var(--gold-dim);
     }
 
-    /* Header action buttons */
-    .sunny-header-actions { display: flex; gap: 8px; }
-
-    .sunny-hdr-btn {
-        width: 36px; height: 36px;
-        display: flex; align-items: center; justify-content: center;
-        background: linear-gradient(145deg, rgba(212,175,55,0.15), rgba(212,175,55,0.05));
-        border: 1px solid var(--gold-border);
-        border-radius: var(--radius-sm);
-        color: var(--gold);
+    .sunny-header-actions {
+        display: flex;
+        gap: 4px;
+    }
+    .sunny-hdr-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 14px;
+        background: var(--surface-1);
+        border: 1px solid transparent;
+        border-radius: 999px;
+        color: var(--text-muted);
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 500;
         cursor: pointer;
-        font-size: 1em;
-        transition: all var(--transition);
-        position: relative;
-        overflow: hidden;
+        text-decoration: none;
+        transition: all var(--t-fast) var(--ease);
     }
-
-    .sunny-hdr-btn::after,
-    .sunny-attach-btn::after,
-    .sunny-thread-action-btn::after {
-        content: attr(data-emoji);
-        font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif !important;
-        font-style: normal;
-        font-weight: normal;
-        pointer-events: none;
-    }
-
-    .sunny-hdr-btn::before {
-        content: '';
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 0;
-        height: 0;
-        background: radial-gradient(circle, rgba(255,215,0,0.3) 0%, transparent 70%);
-        border-radius: 50%;
-        transform: translate(-50%, -50%);
-        transition: width 0.4s, height 0.4s;
-    }
-
-    .sunny-hdr-btn:hover,
-    .sunny-hdr-btn.active {
-        background: linear-gradient(145deg, rgba(212,175,55,0.3), rgba(212,175,55,0.15));
-        border-color: var(--gold-light);
-        box-shadow: 0 0 15px rgba(212,175,55,0.3);
+    .sunny-hdr-link:hover {
+        background: var(--surface-2);
+        color: var(--text-main);
+        border-color: var(--glass-border);
         transform: translateY(-1px);
     }
+    .sunny-hdr-link:active { transform: translateY(0); }
+    .sunny-hdr-link.active {
+        background: var(--gold-dim);
+        color: var(--gold-light);
+        border-color: var(--gold-border);
+    }
+    .sunny-hdr-link .material-symbols-outlined { font-size: 18px; }
 
-    .sunny-hdr-btn:hover::before,
-    .sunny-hdr-btn.active::before {
-        width: 60px;
-        height: 60px;
+    /* ── MAIN CHAT AREA ─────────────────────────────────────────── */
+    .sunny-chat-main {
+        grid-area: main;
+        display: flex !important;
+        flex-direction: column !important;
+        overflow: hidden !important;
+        position: relative;
+        margin-left: 0 !important;
+        min-height: 0;
     }
 
-    .sunny-hdr-btn:active {
-        transform: translateY(0);
-    }
-
-    /* ── MESSAGES ─────────────────────────────────────────── */
+    /* ── MESSAGES ───────────────────────────────────────────────── */
     .sunny-chat-messages {
-        background: linear-gradient(180deg, var(--bg-deep) 0%, #0d0f12 100%);
-        height: min(60vh, 480px);
-        min-height: 300px;
+        flex: 1;
         overflow-y: auto;
         overflow-x: hidden;
-        padding: 20px;
+        padding: 24px clamp(16px, 5vw, 48px) 16px;
         display: flex;
         flex-direction: column;
         gap: 14px;
         scroll-behavior: smooth;
+        scrollbar-width: thin;
+        scrollbar-color: var(--surface-3) transparent;
         position: relative;
     }
+    .sunny-chat-messages::-webkit-scrollbar { width: 8px; }
+    .sunny-chat-messages::-webkit-scrollbar-track { background: transparent; }
+    .sunny-chat-messages::-webkit-scrollbar-thumb {
+        background: var(--surface-3);
+        border-radius: 4px;
+    }
+    .sunny-chat-messages::-webkit-scrollbar-thumb:hover { background: var(--gold-border); }
 
-    /* Custom scrollbar */
-    .sunny-chat-messages::-webkit-scrollbar { 
-        width: 6px; 
-    }
-    .sunny-chat-messages::-webkit-scrollbar-track { 
-        background: transparent; 
-        margin: 8px 0;
-    }
-    .sunny-chat-messages::-webkit-scrollbar-thumb { 
-        background: linear-gradient(180deg, var(--gold-border), rgba(212,175,55,0.2)); 
-        border-radius: 3px;
-    }
-    .sunny-chat-messages::-webkit-scrollbar-thumb:hover { 
-        background: var(--gold-border); 
-    }
-
-    /* ── BUBBLES ──────────────────────────────────────────── */
+    /* Bulles — base */
     .chat-bubble {
-        max-width: min(85%, 600px);
+        max-width: min(78%, 680px);
         padding: 12px 16px;
-        border-radius: 18px;
-        line-height: 1.65;
-        font-size: 0.94em;
-        white-space: pre-wrap;
-        word-break: break-word;
+        border-radius: var(--radius-lg);
+        font-size: 14.5px;
+        line-height: 1.55;
+        word-wrap: break-word;
         position: relative;
-        animation: bubble-in 0.35s var(--transition) both;
-        will-change: transform, opacity;
+        animation: bubble-in var(--t-slow) var(--ease-spring) backwards;
+        animation-delay: calc(var(--i, 0) * 40ms);
     }
-
     @keyframes bubble-in {
-        from { 
-            opacity: 0; 
-            transform: translateY(12px) scale(0.96); 
-        }
-        to { 
-            opacity: 1; 
-            transform: translateY(0) scale(1); 
-        }
+        from { opacity: 0; transform: translateY(12px) scale(0.96); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
     }
 
-    /* Staggered animation for multiple bubbles */
-    .chat-bubble:nth-child(1) { animation-delay: 0.05s; }
-    .chat-bubble:nth-child(2) { animation-delay: 0.1s; }
-    .chat-bubble:nth-child(3) { animation-delay: 0.15s; }
+    /* Animation échelonnée pour les nouveaux messages */
+    .sunny-chat-messages > * { animation-delay: 0ms; }
 
     .chat-bubble.user {
         align-self: flex-end;
-        background: linear-gradient(135deg, #c9a43f 0%, var(--gold-light) 100%);
-        color: #1a1600;
-        font-weight: 600;
-        border-bottom-right-radius: 4px;
-        box-shadow: 
-            0 4px 20px rgba(212,175,55,0.3),
-            0 1px 2px rgba(0,0,0,0.1);
-        text-shadow: 0 1px 0 rgba(255,255,255,0.2);
-    }
-
-    .chat-bubble.user::after {
-        content: '';
-        position: absolute;
-        bottom: 0;
-        right: -6px;
-        width: 12px;
-        height: 12px;
-        background: var(--gold-light);
-        clip-path: polygon(0 0, 0% 100%, 100% 100%);
+        background: var(--user-grad);
+        color: #1a1410;
+        font-weight: 500;
+        border-bottom-right-radius: 6px;
+        box-shadow: var(--shadow-gold);
     }
 
     .chat-bubble.sunny {
         align-self: flex-start;
-        background: linear-gradient(145deg, var(--bg-card) 0%, #252a33 100%);
-        border: 1px solid var(--gold-border);
+        background: var(--glass-bg);
+        backdrop-filter: var(--glass-blur);
+        -webkit-backdrop-filter: var(--glass-blur);
+        border: 1px solid var(--glass-border);
         color: var(--text-main);
-        border-bottom-left-radius: 4px;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+        border-bottom-left-radius: 6px;
+        box-shadow: var(--shadow-sm);
     }
-
-    .chat-bubble.sunny::after {
-        content: '';
-        position: absolute;
-        bottom: 0;
-        left: -6px;
-        width: 12px;
-        height: 12px;
-        background: var(--bg-card);
-        border-left: 1px solid var(--gold-border);
-        border-bottom: 1px solid var(--gold-border);
-        clip-path: polygon(100% 0, 0% 100%, 100% 100%);
+    .chat-bubble.sunny strong { color: var(--gold-light); font-weight: 700; }
+    .chat-bubble.sunny a { color: var(--gold-light); text-decoration: underline; text-underline-offset: 2px; }
+    .chat-bubble.sunny .sunny-rich {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
     }
-
-    .chat-bubble.sunny strong { 
-        color: var(--gold-light); 
-        font-weight: 600;
+    .chat-bubble.sunny .sunny-rich-message {
+        margin: 0;
+        white-space: pre-wrap;
     }
-
-    .chat-bubble.sunny a {
-        color: var(--gold-light);
+    .chat-bubble.sunny .sunny-rich-section {
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid var(--glass-border);
+        background: rgba(255, 255, 255, 0.02);
+    }
+    .chat-bubble.sunny .sunny-rich-title {
+        margin: 0 0 8px;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--gold-soft);
+    }
+    .chat-bubble.sunny .sunny-rich-list {
+        margin: 0;
+        padding-left: 18px;
+        display: grid;
+        gap: 8px;
+    }
+    .chat-bubble.sunny .sunny-rich-list li {
+        margin: 0;
+    }
+    .chat-bubble.sunny .sunny-rich-item-title {
+        font-weight: 700;
+        margin-right: 6px;
+        color: #f6f8fc;
+    }
+    .chat-bubble.sunny .sunny-rich-item-description {
+        color: var(--text-main);
+    }
+    .chat-bubble.sunny .sunny-rich-badge {
+        display: inline-block;
+        margin-left: 8px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        border: 1px solid transparent;
+    }
+    .chat-bubble.sunny .sunny-rich-badge.high {
+        color: #ffb3b3;
+        border-color: rgba(255, 94, 94, 0.5);
+        background: rgba(255, 94, 94, 0.16);
+    }
+    .chat-bubble.sunny .sunny-rich-badge.medium {
+        color: #ffd39d;
+        border-color: rgba(255, 159, 67, 0.5);
+        background: rgba(255, 159, 67, 0.16);
+    }
+    .chat-bubble.sunny .sunny-rich-badge.low {
+        color: #f5e7b3;
+        border-color: rgba(245, 215, 110, 0.5);
+        background: rgba(245, 215, 110, 0.14);
+    }
+    .chat-bubble.sunny .sunny-rich-link-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 8px;
+    }
+    .chat-bubble.sunny .sunny-rich-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 11px;
+        border-radius: 10px;
+        border: 1px solid var(--gold-border);
+        background: rgba(212, 175, 55, 0.1);
         text-decoration: none;
-        border-bottom: 1px solid var(--gold-border);
-        transition: border-color var(--transition);
+        font-weight: 600;
+        width: fit-content;
     }
-
-    .chat-bubble.sunny a:hover {
-        border-color: var(--gold-light);
+    .chat-bubble.sunny .sunny-rich-link:hover {
+        background: rgba(212, 175, 55, 0.16);
+    }
+    .chat-bubble.sunny .sunny-rich-diagnosis {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    .chat-bubble.sunny .sunny-rich-diagnosis p {
+        margin: 0;
     }
 
     .chat-bubble.system {
         align-self: center;
-        background: linear-gradient(135deg, rgba(212,175,55,0.12), rgba(212,175,55,0.05));
-        border: 1px solid rgba(212,175,55,0.25);
-        color: var(--gold);
-        font-size: 0.82em;
-        border-radius: 22px;
-        padding: 8px 18px;
-        font-weight: 500;
-        max-width: 92%;
+        max-width: 90%;
+        background: var(--surface-1);
+        border: 1px dashed var(--glass-border);
+        color: var(--text-muted);
+        font-size: 13px;
         text-align: center;
-        animation: system-bubble-in 0.4s var(--transition) both;
+        padding: 8px 14px;
+        border-radius: 999px;
     }
+    .chat-bubble.system a { color: var(--gold-light); }
 
-    @keyframes system-bubble-in {
-        from { 
-            opacity: 0; 
-            transform: translateY(10px) scale(0.95); 
-        }
-        to { 
-            opacity: 1; 
-            transform: translateY(0) scale(1); 
-        }
-    }
-
-    /* ── TYPING INDICATOR ────────────────────────────────── */
+    /* Indicateur de frappe réaliste */
     .typing-indicator {
         align-self: flex-start;
-        background: linear-gradient(145deg, var(--bg-card), #252a33);
-        border: 1px solid var(--gold-border);
-        border-radius: 18px 18px 18px 4px;
-        padding: 12px 16px;
-        display: flex; gap: 4px; align-items: center;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        animation: typing-in 0.3s var(--transition) both;
-    }
-
-    @keyframes typing-in {
-        from { opacity: 0; transform: scale(0.9); }
-        to { opacity: 1; transform: scale(1); }
-    }
-
-    .typing-indicator span {
-        width: 8px; height: 8px;
-        background: linear-gradient(135deg, var(--gold), var(--gold-light));
-        border-radius: 50%;
-        animation: typing-bounce 1.4s ease-in-out infinite both;
-    }
-    .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
-    .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
-    .typing-indicator span:nth-child(3) { animation-delay: 0s; }
-
-    @keyframes typing-bounce {
-        0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
-        40% { transform: scale(1); opacity: 1; }
-    }
-
-    /* ── ALERTES ─────────────────────────────────────────── */
-    .sunny-alertes { 
-        margin-top: 10px; 
-        display: flex; 
-        flex-direction: column; 
-        gap: 6px;
-        animation: alerts-in 0.3s var(--transition) both;
-    }
-
-    @keyframes alerts-in {
-        from { opacity: 0; transform: translateX(-10px); }
-        to { opacity: 1; transform: translateX(0); }
-    }
-
-    .sunny-alerte {
-        background: linear-gradient(90deg, rgba(212,175,55,0.15), rgba(212,175,55,0.05));
-        border-left: 3px solid var(--gold);
-        padding: 8px 12px;
-        border-radius: 0 8px 8px 0;
-        font-size: 0.85em;
-        color: var(--gold-light);
-        display: flex;
+        background: var(--glass-bg);
+        backdrop-filter: var(--glass-blur);
+        -webkit-backdrop-filter: var(--glass-blur);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-lg);
+        border-bottom-left-radius: 6px;
+        padding: 14px 18px;
+        display: inline-flex;
+        gap: 5px;
         align-items: center;
+        animation: bubble-in var(--t-slow) var(--ease-spring);
+    }
+    .typing-indicator span {
+        width: 7px; height: 7px;
+        background: var(--gold);
+        border-radius: 50%;
+        opacity: 0.4;
+        animation: typing-bounce 1.3s var(--ease) infinite;
+    }
+    .typing-indicator span:nth-child(2) { animation-delay: 0.18s; }
+    .typing-indicator span:nth-child(3) { animation-delay: 0.36s; }
+    @keyframes typing-bounce {
+        0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+        30%           { transform: translateY(-7px); opacity: 1; }
+    }
+
+    /* Alertes */
+    .sunny-alertes {
+        align-self: stretch;
+        display: flex; flex-direction: column;
         gap: 6px;
-        animation: alert-slide 0.3s var(--transition) both;
+        max-width: 78%;
+        animation: bubble-in var(--t-slow) var(--ease-spring);
     }
+    .sunny-alerte {
+        padding: 10px 14px;
+        border-radius: var(--radius);
+        font-size: 13.5px;
+        font-weight: 500;
+        border-left: 3px solid;
+        background: var(--surface-1);
+        backdrop-filter: blur(10px);
+    }
+    .sunny-alerte.faible  { border-color: #f5d76e; color: #f5d76e; background: rgba(245,215,110,0.08); }
+    .sunny-alerte.moyenne { border-color: #ff9f43; color: #ffb976; background: rgba(255,159,67,0.10); }
+    .sunny-alerte.haute,
+    .sunny-alerte.critique { border-color: #ff5e5e; color: #ff8585; background: rgba(255,94,94,0.12); }
 
-    @keyframes alert-slide {
-        from { opacity: 0; transform: translateX(-15px); }
-        to { opacity: 1; transform: translateX(0); }
-    }
-
-    .sunny-alerte.haute { 
-        background: linear-gradient(90deg, rgba(231,76,60,0.15), rgba(231,76,60,0.05));
-        border-left-color: #e74c3c; 
-        color: #ff8585; 
-    }
-    .sunny-alerte.moyenne { 
-        background: linear-gradient(90deg, rgba(243,156,18,0.15), rgba(243,156,18,0.05));
-        border-left-color: #f39c12; 
-        color: #ffc266; 
-    }
-
-    .sunny-alerte::before {
-        content: '⚠️';
-        font-size: 1.1em;
-    }
-
-    /* ── DRAWER OVERLAY ──────────────────────────────────── */
-    .sunny-drawer-overlay {
-        display: none;
+    /* ── FAB SCROLL TO BOTTOM ──────────────────────────────────── */
+    .sunny-scroll-fab {
         position: absolute;
-        inset: 0;
-        background: linear-gradient(180deg, rgba(10,12,18,0.4), rgba(10,12,18,0.8));
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
-        z-index: 20;
+        right: 24px;
+        bottom: 16px;
+        width: 42px; height: 42px;
+        border-radius: 50%;
+        border: 1px solid var(--glass-border);
+        background: var(--glass-bg);
+        backdrop-filter: var(--glass-blur);
+        -webkit-backdrop-filter: var(--glass-blur);
+        color: var(--gold-light);
+        cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: var(--shadow);
         opacity: 0;
-        transition: opacity 0.3s var(--transition);
+        transform: translateY(8px) scale(0.9);
+        pointer-events: none;
+        transition: opacity var(--t-base) var(--ease), transform var(--t-base) var(--ease-spring), background var(--t-fast);
+        z-index: 5;
     }
-    .sunny-drawer-overlay.active { 
-        display: block; 
+    .sunny-scroll-fab.visible {
         opacity: 1;
+        transform: translateY(0) scale(1);
+        pointer-events: auto;
+    }
+    .sunny-scroll-fab:hover {
+        background: var(--gold-dim);
+        border-color: var(--gold-border);
+    }
+    .sunny-scroll-fab .material-symbols-outlined { font-size: 22px; }
+
+    /* ── INPUT AREA ────────────────────────────────────────────── */
+    .sunny-chat-input-area {
+        padding: 12px clamp(16px, 5vw, 48px) 16px;
+        background: linear-gradient(180deg, transparent 0%, rgba(11,13,18,0.6) 30%, var(--bg-deep) 100%);
+        backdrop-filter: blur(12px);
+        position: relative;
+        z-index: 6;
     }
 
-    /* ── DRAWERS ─────────────────────────────────────────── */
-    .sunny-drawer {
-        position: absolute;
+    .sunny-suggestions {
+        display: flex;
+        gap: 8px;
+        padding-bottom: 10px;
+        overflow-x: auto;
+        scrollbar-width: none;
+        scroll-behavior: smooth;
+        mask-image: linear-gradient(90deg, transparent 0, black 16px, black calc(100% - 16px), transparent 100%);
+    }
+    .sunny-suggestions::-webkit-scrollbar { display: none; }
+
+    .sunny-suggestion-pill {
+        flex-shrink: 0;
+        padding: 7px 14px;
+        background: var(--surface-1);
+        border: 1px solid var(--glass-border);
+        color: var(--text-muted);
+        border-radius: 999px;
+        font-family: inherit;
+        font-size: 12.5px;
+        font-weight: 500;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: all var(--t-fast) var(--ease);
+    }
+    .sunny-suggestion-pill:hover {
+        background: var(--gold-dim);
+        color: var(--gold-light);
+        border-color: var(--gold-border);
+        transform: translateY(-2px);
+    }
+    .sunny-suggestion-pill:active { transform: translateY(0); }
+
+    /* Image preview compact */
+    .sunny-image-preview {
+        display: none;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 10px;
+        padding: 8px 10px;
+        background: var(--surface-2);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius);
+        animation: bubble-in var(--t-base) var(--ease-spring);
+    }
+    .sunny-image-preview.active { display: flex; }
+    .sunny-image-preview img {
+        width: 44px; height: 44px;
+        object-fit: cover;
+        border-radius: 8px;
+        border: 1px solid var(--glass-border);
+    }
+    .sunny-image-preview .img-meta { flex: 1; min-width: 0; }
+    .sunny-image-meta-label { font-size: 13px; font-weight: 600; color: var(--text-main); }
+    .sunny-image-meta-sub { font-size: 11.5px; color: var(--text-muted); }
+    .sunny-image-remove {
+        width: 28px; height: 28px;
+        border: none;
+        background: var(--surface-2);
+        color: var(--text-muted);
+        border-radius: 50%;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all var(--t-fast);
+    }
+    .sunny-image-remove:hover { background: rgba(255,94,94,0.2); color: #ff8585; }
+
+    .sunny-file-input { display: none !important; }
+
+    /* Input unifié */
+    .sunny-input-unified {
+        display: flex;
+        align-items: flex-end;
+        gap: 8px;
+        padding: 8px;
+        background: var(--bg-card);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-xl);
+        box-shadow: var(--shadow);
+        transition: border-color var(--t-base), box-shadow var(--t-base);
+    }
+    .sunny-input-unified:focus-within {
+        border-color: var(--gold-border);
+        box-shadow: 0 0 0 4px var(--gold-dim), var(--shadow);
+    }
+
+    .sunny-attach-btn, .sunny-send-btn {
+        flex-shrink: 0;
+        width: 40px; height: 40px;
+        border: none;
+        border-radius: 50%;
+        cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        transition: all var(--t-fast) var(--ease);
+    }
+    .sunny-attach-btn {
+        background: transparent;
+        color: var(--text-muted);
+    }
+    .sunny-attach-btn:hover {
+        background: var(--surface-3);
+        color: var(--gold-light);
+        transform: rotate(15deg);
+    }
+    .sunny-attach-btn .material-symbols-outlined { font-size: 22px; }
+
+    .sunny-send-btn {
+        background: var(--user-grad);
+        color: #1a1410;
+        box-shadow: 0 4px 12px var(--gold-glow);
+    }
+    .sunny-send-btn:hover:not(:disabled) {
+        transform: scale(1.08) rotate(-15deg);
+        box-shadow: 0 6px 20px var(--gold-glow);
+    }
+    .sunny-send-btn:active:not(:disabled) { transform: scale(0.95); }
+    .sunny-send-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        background: var(--surface-3);
+        color: var(--text-faint);
+        box-shadow: none;
+    }
+    .sunny-send-btn .material-symbols-outlined { font-size: 20px; }
+
+    #sunny-input {
+        flex: 1;
+        min-height: 40px;
+        max-height: 120px;
+        padding: 10px 8px;
+        background: transparent;
+        border: none;
+        outline: none;
+        color: var(--text-main);
+        font-family: inherit;
+        font-size: 15px;
+        line-height: 1.45;
+        resize: none;
+        scrollbar-width: thin;
+        scrollbar-color: var(--surface-3) transparent;
+    }
+    #sunny-input::placeholder { color: var(--text-faint); }
+
+    /* ── MOBILE BOTTOM NAV ─────────────────────────────────────── */
+    .sunny-mobile-nav {
+        display: none;
+        position: fixed;
         bottom: 0; left: 0; right: 0;
-        background: linear-gradient(180deg, rgba(28,31,38,0.98) 0%, rgba(25,28,35,0.99) 100%);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        border-top: 1px solid var(--gold-border);
-        border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-        z-index: 30;
-        max-height: 85%;
-        overflow-y: auto;
-        overflow-x: hidden;
-        padding: 0 0 calc(16px + var(--safe-bottom));
-        transform: translateY(100%);
-        transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1);
-        box-shadow: 
-            0 -20px 60px rgba(0,0,0,0.6),
-            0 -1px 0 var(--gold-border),
-            inset 0 1px 0 rgba(255,255,255,0.05);
-        will-change: transform;
+        height: var(--mobilenav-h);
+        background: var(--glass-bg);
+        backdrop-filter: var(--glass-blur);
+        -webkit-backdrop-filter: var(--glass-blur);
+        border-top: 1px solid var(--glass-border);
+        z-index: 50;
+        padding-bottom: env(safe-area-inset-bottom, 0);
     }
-    .sunny-drawer.open { 
-        transform: translateY(0); 
+    .sunny-mobile-nav-btn {
+        flex: 1;
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        font-family: inherit;
+        font-size: 10.5px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: color var(--t-fast), background var(--t-fast);
+        text-decoration: none;
+    }
+    .sunny-mobile-nav-btn .material-symbols-outlined { font-size: 22px; }
+    .sunny-mobile-nav-btn:hover { color: var(--text-main); }
+    .sunny-mobile-nav-btn.active { color: var(--gold-light); }
+    .sunny-mobile-nav-btn:active { background: var(--surface-2); }
+
+    /* ── DRAWER OVERLAY ────────────────────────────────────────── */
+    .sunny-drawer-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.55);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity var(--t-base) var(--ease);
+        z-index: 60;
+    }
+    .sunny-drawer-overlay.active {
+        opacity: 1;
+        pointer-events: auto;
     }
 
-    .sunny-drawer::-webkit-scrollbar { 
-        width: 5px; 
+    /* ── DRAWERS ───────────────────────────────────────────────── */
+    .sunny-drawer {
+        position: fixed;
+        top: 0; right: 0;
+        height: 100vh; height: 100dvh;
+        width: min(440px, 100vw);
+        background: var(--glass-bg);
+        backdrop-filter: var(--glass-blur);
+        -webkit-backdrop-filter: var(--glass-blur);
+        border-left: 1px solid var(--glass-border);
+        box-shadow: var(--shadow-lg);
+        transform: translateX(105%);
+        transition: transform var(--t-slow) var(--ease);
+        z-index: 70;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
     }
-    .sunny-drawer::-webkit-scrollbar-thumb { 
-        background: var(--gold-border); 
-        border-radius: 3px;
-    }
+    .sunny-drawer.open { transform: translateX(0); }
 
     .sunny-drawer-handle {
-        width: 40px; height: 5px;
-        background: linear-gradient(90deg, transparent, var(--gold-border), transparent);
-        border-radius: 3px;
-        margin: 14px auto 4px;
-        position: relative;
-    }
-
-    .sunny-drawer-handle::after {
-        content: '';
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: 60px;
-        height: 20px;
-        cursor: grab;
+        display: none;
+        width: 40px; height: 4px;
+        background: var(--surface-3);
+        border-radius: 2px;
+        margin: 8px auto 0;
+        flex-shrink: 0;
     }
 
     .sunny-drawer-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 12px 20px 14px;
-        border-bottom: 1px solid var(--gold-dim);
-        position: sticky;
-        top: 0;
-        background: linear-gradient(180deg, rgba(28,31,38,0.98), rgba(28,31,38,0.95));
-        backdrop-filter: blur(10px);
-        z-index: 5;
+        padding: 18px 22px;
+        border-bottom: 1px solid var(--glass-border);
+        flex-shrink: 0;
     }
-
     .sunny-drawer-header h4 {
-        color: var(--gold-light);
         margin: 0;
-        font-size: 0.9em;
+        font-size: 17px;
         font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 1.5px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
+        color: var(--text-main);
+        letter-spacing: -0.01em;
     }
-
     .sunny-drawer-close {
-        width: 32px; height: 32px;
-        display: flex; align-items: center; justify-content: center;
-        background: linear-gradient(145deg, var(--gold-dim), rgba(212,175,55,0.05));
-        border: 1px solid var(--gold-border);
+        width: 34px; height: 34px;
+        border: none;
+        background: var(--surface-2);
+        color: var(--text-muted);
         border-radius: 50%;
-        color: var(--gold);
         cursor: pointer;
-        font-size: 0.9em;
-        transition: all var(--transition);
-        position: relative;
-        overflow: hidden;
+        font-size: 14px;
+        transition: all var(--t-fast);
     }
-
-    .sunny-drawer-close:hover { 
-        background: rgba(212,175,55,0.25);
-        border-color: var(--gold-light);
+    .sunny-drawer-close:hover {
+        background: var(--surface-3);
+        color: var(--text-main);
         transform: rotate(90deg);
     }
 
-    .sunny-drawer-body { 
-        padding: 16px 20px calc(16px + var(--safe-bottom));
+    .sunny-drawer-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px 22px 28px;
+        scrollbar-width: thin;
+        scrollbar-color: var(--surface-3) transparent;
     }
+    .sunny-drawer-body::-webkit-scrollbar { width: 8px; }
+    .sunny-drawer-body::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 4px; }
 
-    /* ── DRAWER : ANALYSE ───────────────────────────────── */
+    /* ── DRAWER : ANALYSE ──────────────────────────────────────── */
     .analyse-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-        gap: 10px;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 12px;
     }
-
+    .analyse-field { display: flex; flex-direction: column; gap: 6px; }
     .analyse-field label {
-        color: var(--text-muted);
-        font-size: 0.75em;
+        font-size: 12px;
         font-weight: 600;
+        color: var(--text-muted);
         text-transform: uppercase;
-        letter-spacing: 0.5px;
-        display: block;
-        margin-bottom: 5px;
+        letter-spacing: 0.04em;
     }
-
-    .analyse-field input {
-        width: 100%;
-        padding: 9px 12px;
+    .analyse-field input,
+    .analyse-field select,
+    .product-form-row input,
+    .product-form-row select,
+    .product-form-row textarea {
+        padding: 10px 12px;
         background: var(--bg-input);
-        border: 1px solid var(--gold-border);
-        color: var(--text-main);
+        border: 1px solid var(--glass-border);
         border-radius: var(--radius-sm);
-        font-size: 0.9em;
+        color: var(--text-main);
+        font-family: inherit;
+        font-size: 14px;
+        transition: all var(--t-fast);
     }
-    .analyse-field input:focus {
+    .analyse-field input:focus,
+    .product-form-row input:focus,
+    .product-form-row select:focus,
+    .product-form-row textarea:focus {
         outline: none;
-        border-color: var(--gold-light);
-        box-shadow: 0 0 0 3px rgba(255,215,0,0.12);
+        border-color: var(--gold);
+        box-shadow: 0 0 0 3px var(--gold-dim);
     }
 
     .analyse-actions {
-        margin-top: 14px;
+        margin-top: 18px;
         display: flex;
-        align-items: center;
-        justify-content: space-between;
+        flex-direction: column;
         gap: 10px;
-        flex-wrap: wrap;
     }
-
     .analyse-submit-btn {
+        padding: 12px 20px;
+        background: var(--user-grad);
+        color: #1a1410;
         border: none;
-        background: linear-gradient(135deg, #c9a43f 0%, var(--gold-light) 100%);
-        color: #1a1600;
-        padding: 10px 14px;
-        border-radius: var(--radius-sm);
-        cursor: pointer;
+        border-radius: var(--radius);
+        font-family: inherit;
+        font-size: 14px;
         font-weight: 700;
-        font-size: 0.86em;
-        transition: all var(--transition);
+        cursor: pointer;
+        box-shadow: var(--shadow-gold);
+        transition: all var(--t-fast) var(--ease);
     }
-    .analyse-submit-btn:hover {
-        box-shadow: 0 4px 14px rgba(255,215,0,0.35);
-        transform: translateY(-1px);
-    }
+    .analyse-submit-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 28px var(--gold-glow); }
+    .analyse-submit-btn:active { transform: translateY(0); }
 
-    .analyse-history {
-        margin-top: 14px;
-        border-top: 1px solid var(--gold-dim);
-        padding-top: 12px;
-    }
-
+    .analyse-history { margin-top: 28px; }
     .analyse-history h5 {
-        margin: 0 0 10px;
-        color: var(--gold-light);
-        font-size: 0.82em;
+        margin: 0 0 12px;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text-muted);
         text-transform: uppercase;
-        letter-spacing: 0.8px;
+        letter-spacing: 0.05em;
     }
-
-    .analyse-history-list {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        max-height: 220px;
-        overflow-y: auto;
-    }
-
+    .analyse-history-list { display: flex; flex-direction: column; gap: 8px; }
     .analyse-history-item {
-        background: rgba(255,255,255,0.03);
-        border: 1px solid var(--gold-dim);
-        border-radius: var(--radius-sm);
-        padding: 8px 10px;
-        font-size: 0.8em;
+        padding: 12px 14px;
+        background: var(--surface-1);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius);
+        font-size: 13px;
         color: var(--text-main);
+        transition: all var(--t-fast);
     }
-
-    .analyse-history-meta {
-        color: var(--text-muted);
-        font-size: 0.74em;
-        margin-bottom: 6px;
-    }
-
-    .analyse-history-values {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-    }
-
-    .analyse-pill {
-        background: var(--gold-dim);
-        border: 1px solid var(--gold-border);
-        color: var(--gold-light);
-        border-radius: 20px;
-        padding: 2px 8px;
-        font-size: 0.72em;
-    }
-
-    /* ── MODAL RÉSULTAT ANALYSE ────────────────────────── */
-    .sunny-modal-backdrop {
-        position: fixed;
-        inset: 0;
-        background: rgba(0,0,0,0.72);
-        z-index: 99990;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 16px;
-        animation: modal-fade-in 0.22s ease both;
-    }
-    @keyframes modal-fade-in {
-        from { opacity: 0; }
-        to   { opacity: 1; }
-    }
-    .sunny-modal-backdrop.closing {
-        animation: modal-fade-out 0.18s ease both;
-    }
-    @keyframes modal-fade-out {
-        from { opacity: 1; }
-        to   { opacity: 0; }
-    }
-
-    .sunny-modal {
-        background: linear-gradient(145deg, var(--bg-card) 0%, #1a1d24 100%);
-        border: 1px solid var(--gold-border);
-        border-radius: var(--radius-lg);
-        box-shadow: 0 24px 70px rgba(0,0,0,0.7), 0 0 0 1px rgba(212,175,55,0.08);
-        width: 100%;
-        max-width: 560px;
-        max-height: 88vh;
-        overflow-y: auto;
-        animation: modal-slide-in 0.28s cubic-bezier(.4,0,.2,1) both;
-    }
-    @keyframes modal-slide-in {
-        from { opacity: 0; transform: translateY(18px) scale(0.97); }
-        to   { opacity: 1; transform: translateY(0) scale(1); }
-    }
-    .sunny-modal::-webkit-scrollbar { width: 5px; }
-    .sunny-modal::-webkit-scrollbar-thumb { background: var(--gold-border); border-radius: 3px; }
-
-    .sunny-modal-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 18px 20px 14px;
-        border-bottom: 1px solid var(--gold-dim);
-        position: sticky;
-        top: 0;
-        background: var(--bg-card);
-        z-index: 1;
-    }
-    .sunny-modal-title {
-        font-size: 0.95em;
-        font-weight: 700;
-        color: var(--gold-light);
-        letter-spacing: 0.3px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-    .sunny-modal-close {
-        width: 28px; height: 28px;
-        display: flex; align-items: center; justify-content: center;
-        background: rgba(255,255,255,0.06);
-        border: 1px solid var(--gold-dim);
-        border-radius: 50%;
-        color: var(--text-muted);
-        cursor: pointer;
-        font-size: 0.8em;
-        transition: all var(--transition);
-        font-family: inherit !important;
-    }
-    .sunny-modal-close:hover { background: rgba(231,76,60,0.18); color: #ff8585; border-color: rgba(231,76,60,0.3); }
-
-    .sunny-modal-body {
-        padding: 18px 20px;
-    }
-
-    /* Status "en cours" */
-    .sunny-modal-pending {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 14px;
-        padding: 28px 20px;
-        text-align: center;
-    }
-    .sunny-modal-pending-spinner {
-        display: flex; gap: 6px;
-    }
-    .sunny-modal-pending-spinner span {
-        width: 10px; height: 10px;
-        background: var(--gold);
-        border-radius: 50%;
-        animation: sc-bounce 1.3s ease-in-out infinite;
-        font-family: inherit !important;
-    }
-    .sunny-modal-pending-spinner span:nth-child(2) { animation-delay: 0.18s; }
-    .sunny-modal-pending-spinner span:nth-child(3) { animation-delay: 0.36s; }
-    @keyframes sc-bounce {
-        0%,60%,100% { transform: translateY(0); }
-        30%          { transform: translateY(-8px); }
-    }
-    .sunny-modal-pending-text {
-        color: var(--text-muted);
-        font-size: 0.88em;
-        line-height: 1.5;
-    }
-    .sunny-modal-pending-text strong { color: var(--gold-light); display: block; margin-bottom: 4px; font-size: 1.05em; }
-
-    /* Diagnostic lines */
-    .diag-line {
-        display: flex;
-        align-items: flex-start;
-        gap: 10px;
-        padding: 10px 12px;
-        border-radius: var(--radius-sm);
-        background: rgba(255,255,255,0.03);
-        border: 1px solid var(--gold-dim);
-        margin-bottom: 8px;
-        font-size: 0.875em;
-        line-height: 1.5;
-        color: var(--text-main);
-        animation: bubble-in 0.25s ease both;
-    }
-    @keyframes bubble-in {
-        from { opacity: 0; transform: translateY(6px); }
-        to   { opacity: 1; transform: translateY(0); }
-    }
-    .diag-line:nth-child(1) { animation-delay: 0.04s; }
-    .diag-line:nth-child(2) { animation-delay: 0.08s; }
-    .diag-line:nth-child(3) { animation-delay: 0.12s; }
-    .diag-line:nth-child(4) { animation-delay: 0.16s; }
-    .diag-line:nth-child(5) { animation-delay: 0.20s; }
-    .diag-line.urgent { border-color: rgba(229,92,92,0.4); background: rgba(229,92,92,0.07); }
-    .diag-line.warning { border-color: rgba(232,146,74,0.4); background: rgba(232,146,74,0.07); }
-    .diag-line.ok { border-color: rgba(74,207,168,0.3); background: rgba(74,207,168,0.05); }
-    .diag-emoji { font-size: 1.1em; flex-shrink: 0; margin-top: 1px; font-family: 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif !important; }
-
-    /* Alertes dans le modal */
-    .modal-alertes { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
-    .modal-alerte {
-        display: flex; align-items: flex-start; gap: 8px;
-        padding: 9px 12px;
-        border-radius: var(--radius-sm);
-        font-size: 0.82em;
-        line-height: 1.4;
-        border-left: 3px solid;
-    }
-    .modal-alerte.haute   { background: rgba(229,92,92,0.1);  border-color: #e55c5c; color: #ff9090; }
-    .modal-alerte.moyenne { background: rgba(232,146,74,0.1); border-color: #e8924a; color: #ffa96e; }
-    .modal-alerte.faible  { background: rgba(212,175,55,0.1); border-color: var(--gold); color: var(--gold-light); }
-    .modal-alerte-icon { font-family: 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif !important; }
-
-    /* Bouton Discuter */
-    .sunny-modal-footer {
-        padding: 14px 20px 18px;
-        border-top: 1px solid var(--gold-dim);
-        display: flex;
-        gap: 10px;
-        align-items: center;
-        justify-content: flex-end;
-        flex-wrap: wrap;
-    }
-    .btn-discuss {
-        display: inline-flex; align-items: center; gap: 6px;
-        background: linear-gradient(135deg, #c9a43f 0%, var(--gold-light) 100%);
-        color: #1a1600;
-        border: none;
-        border-radius: var(--radius-sm);
-        padding: 9px 16px;
-        font-family: inherit !important;
-        font-size: 0.85em;
-        font-weight: 700;
-        cursor: pointer;
-        transition: all var(--transition);
-        box-shadow: 0 3px 12px rgba(201,168,76,0.3);
-    }
-    .btn-discuss:hover { box-shadow: 0 5px 18px rgba(201,168,76,0.5); transform: translateY(-1px); }
-    .btn-close-modal {
-        display: inline-flex; align-items: center;
-        background: rgba(255,255,255,0.06);
-        border: 1px solid var(--gold-dim);
-        border-radius: var(--radius-sm);
-        color: var(--text-muted);
-        padding: 9px 14px;
-        font-family: inherit !important;
-        font-size: 0.85em;
-        cursor: pointer;
-        transition: all var(--transition);
-    }
-    .btn-close-modal:hover { background: rgba(255,255,255,0.1); color: var(--text-main); }
-
-    /* ── HISTORIQUE ENRICHI ─────────────────────────────── */
-    .analyse-history-item {
-        background: rgba(255,255,255,0.03);
-        border: 1px solid var(--gold-dim);
-        border-radius: var(--radius-sm);
-        padding: 10px 12px;
-        font-size: 0.8em;
-        color: var(--text-main);
-        transition: border-color var(--transition);
-    }
-    .analyse-history-item:hover { border-color: var(--gold-border); }
+    .analyse-history-item:hover { background: var(--surface-2); border-color: var(--gold-border); }
     .analyse-history-item-header {
-        display: flex; align-items: center; justify-content: space-between; gap: 8px;
-        margin-bottom: 6px; flex-wrap: wrap;
+        display: flex; justify-content: space-between; align-items: center;
+        margin-bottom: 8px;
     }
     .analyse-history-status {
-        font-size: 0.72em;
-        padding: 2px 7px;
-        border-radius: 10px;
-        font-weight: 600;
-    }
-    .analyse-history-status.completed { background: rgba(74,207,168,0.15); color: #4acfa8; }
-    .analyse-history-status.pending   { background: rgba(232,146,74,0.15); color: #e8924a; }
-    .analyse-history-status.error     { background: rgba(229,92,92,0.15);  color: #e55c5c; }
-
-    .analyse-history-diag {
-        margin-top: 8px;
-        font-size: 0.78em;
-        color: var(--text-muted);
-        line-height: 1.5;
-        white-space: pre-wrap;
-        border-top: 1px solid var(--gold-dim);
-        padding-top: 7px;
-        display: none; /* toggle */
-    }
-    .analyse-history-diag.expanded { display: block; }
-
-    .analyse-history-actions {
-        display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap;
-    }
-    .btn-history-discuss {
-        display: inline-flex; align-items: center; gap: 4px;
-        background: var(--gold-dim);
-        border: 1px solid var(--gold-border);
-        color: var(--gold-light);
-        border-radius: 20px;
-        padding: 3px 10px;
-        font-family: inherit !important;
-        font-size: 0.75em;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all var(--transition);
-    }
-    .btn-history-discuss:hover { background: rgba(212,175,55,0.3); }
-    .btn-history-toggle {
-        display: inline-flex; align-items: center; gap: 4px;
-        background: rgba(255,255,255,0.05);
-        border: 1px solid var(--gold-dim);
-        color: var(--text-muted);
-        border-radius: 20px;
-        padding: 3px 10px;
-        font-family: inherit !important;
-        font-size: 0.75em;
-        cursor: pointer;
-        transition: all var(--transition);
-    }
-    .btn-history-toggle:hover { background: rgba(255,255,255,0.09); color: var(--text-main); }
-
-    /* ── DRAWER : PRODUITS ──────────────────────────────── */
-    .sunny-products-list { margin-bottom: 14px; }
-
-    .sunny-product-item {
-        padding: 10px 12px;
-        background: rgba(255,255,255,0.03);
-        border: 1px solid var(--gold-dim);
-        border-radius: var(--radius-sm);
-        margin-bottom: 7px;
-    }
-
-    .product-info {
-        display: flex; gap: 7px; align-items: center;
-        margin-bottom: 7px; flex-wrap: wrap;
-    }
-
-    .product-cat {
-        background: var(--gold-dim);
-        color: var(--gold);
-        padding: 2px 7px;
-        border-radius: 4px;
-        font-size: 0.68em;
-        text-transform: uppercase;
-        font-weight: 600;
-    }
-
-    .product-brand { color: var(--gold-light); font-size: 0.83em; font-weight: 700; }
-    .product-name  { color: var(--text-main); font-size: 0.83em; flex: 1; }
-
-    .product-controls {
-        display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
-    }
-
-    .product-controls input,
-    .product-controls select {
-        padding: 5px 8px;
-        background: var(--bg-input);
-        border: 1px solid var(--gold-border);
-        color: var(--text-main);
-        border-radius: 5px;
-        font-size: 0.82em;
-    }
-    .product-controls input { width: 58px; }
-
-    .product-controls button {
-        border: none;
-        color: #fff;
-        padding: 5px 9px;
-        border-radius: 5px;
-        cursor: pointer;
-        font-size: 0.75em;
-        transition: opacity var(--transition);
-    }
-    .product-controls button:hover { opacity: 0.85; }
-    .product-controls button.save-btn { background: rgba(46,204,113,0.8); }
-    .product-controls button.del-btn  { background: rgba(231,76,60,0.8); }
-
-    .product-controls a.photo-link {
-        background: var(--gold-dim);
-        color: var(--gold);
-        padding: 5px 7px;
-        border-radius: 5px;
-        font-size: 0.85em;
-        text-decoration: none;
-    }
-    .product-controls a.photo-link:hover { background: rgba(212,175,55,0.3); }
-
-    /* Product add form */
-    .sunny-product-add-form {
-        border-top: 1px solid var(--gold-dim);
-        padding-top: 14px;
-        margin-top: 4px;
-    }
-
-    .product-form-row {
-        display: flex; gap: 8px; align-items: center;
-        margin-bottom: 8px; flex-wrap: wrap;
-    }
-
-    .product-form-row select,
-    .product-form-row input[type="text"],
-    .product-form-row input[type="number"] {
-        padding: 8px 10px;
-        background: var(--bg-input);
-        border: 1px solid var(--gold-border);
-        color: var(--text-main);
-        border-radius: var(--radius-sm);
-        font-size: 0.85em;
-    }
-
-    .product-form-row input[type="file"] {
-        padding: 6px;
-        background: rgba(255,255,255,0.04);
-        border: 1px dashed var(--gold-border);
-        color: var(--text-muted);
-        border-radius: var(--radius-sm);
-        font-size: 0.78em;
-        flex: 1;
-    }
-
-    .product-form-row textarea {
-        padding: 8px 10px;
-        background: var(--bg-input);
-        border: 1px solid var(--gold-border);
-        color: var(--text-main);
-        border-radius: var(--radius-sm);
-        font-size: 0.85em;
-        min-height: 52px;
-        resize: vertical;
-        font-family: inherit;
-    }
-
-    .product-form-row .btn-add-product {
-        background: linear-gradient(135deg, #c49b2a, var(--gold-light));
-        border: none;
-        color: #1a1600;
-        padding: 9px 16px;
-        border-radius: var(--radius-sm);
-        cursor: pointer;
-        font-size: 0.85em;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 11px;
         font-weight: 700;
-        transition: box-shadow var(--transition);
+        text-transform: uppercase;
     }
-    .product-form-row .btn-add-product:hover {
-        box-shadow: 0 4px 14px rgba(255,215,0,0.4);
-    }
-
-    .sunny-products-empty {
+    .analyse-history-status.excellente { background: rgba(46,204,113,0.18); color: #2ecc71; }
+    .analyse-history-status.correcte   { background: rgba(243,156,18,0.18); color: #f39c12; }
+    .analyse-history-status.corriger   { background: rgba(230,126,34,0.18); color: #e67e22; }
+    .analyse-history-status.critique   { background: rgba(231,76,60,0.18); color: #e74c3c; }
+    .analyse-history-values { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+    .analyse-pill {
+        padding: 3px 9px;
+        background: var(--surface-2);
+        border-radius: 999px;
+        font-size: 11.5px;
         color: var(--text-muted);
-        font-size: 0.85em;
-        font-style: italic;
-        text-align: center;
-        padding: 14px;
     }
+    .analyse-history-actions { display: flex; gap: 6px; margin-top: 8px; }
+    .btn-history-toggle, .btn-history-discuss, .btn-discuss {
+        padding: 6px 12px;
+        background: var(--surface-2);
+        border: 1px solid var(--glass-border);
+        border-radius: 999px;
+        color: var(--text-main);
+        font-family: inherit;
+        font-size: 12px;
+        cursor: pointer;
+        transition: all var(--t-fast);
+    }
+    .btn-history-toggle:hover, .btn-history-discuss:hover, .btn-discuss:hover {
+        background: var(--gold-dim); color: var(--gold-light); border-color: var(--gold-border);
+    }
+    .analyse-history-diag {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height var(--t-base) var(--ease);
+        font-size: 12.5px;
+        color: var(--text-muted);
+    }
+    .analyse-history-diag.expanded {
+        max-height: 600px;
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid var(--glass-border);
+    }
+    .diag-line { padding: 4px 0; }
+    .diag-emoji { margin-right: 4px; }
 
-    /* ── DRAWER : OPTIONS ───────────────────────────────── */
+    /* ── DRAWER : PRODUITS ─────────────────────────────────────── */
+    .sunny-products-list { display: flex; flex-direction: column; gap: 10px; }
+    .sunny-products-empty {
+        padding: 28px 16px;
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 13px;
+        background: var(--surface-1);
+        border-radius: var(--radius);
+    }
+    .sunny-product-item {
+        padding: 12px 14px;
+        background: var(--surface-1);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius);
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        transition: all var(--t-fast);
+    }
+    .sunny-product-item:hover { background: var(--surface-2); border-color: var(--gold-border); }
+    .product-info { flex: 1; min-width: 0; }
+    .product-cat {
+        display: inline-block;
+        padding: 2px 8px;
+        background: var(--gold-dim);
+        color: var(--gold-light);
+        border-radius: 999px;
+        font-size: 10.5px;
+        font-weight: 600;
+        text-transform: uppercase;
+        margin-bottom: 4px;
+    }
+    .product-brand { font-size: 11.5px; color: var(--text-muted); }
+    .product-name { font-size: 13.5px; font-weight: 600; color: var(--text-main); margin-top: 2px; }
+    .product-controls { display: flex; gap: 4px; align-items: center; flex-shrink: 0; }
+    .product-qty, .product-unit {
+        width: 64px;
+        padding: 6px 8px;
+        background: var(--bg-input);
+        border: 1px solid var(--glass-border);
+        border-radius: 6px;
+        color: var(--text-main);
+        font-size: 12px;
+    }
+    .product-unit { width: 70px; }
+    .save-btn, .del-btn {
+        width: 30px; height: 30px;
+        border: none;
+        border-radius: 50%;
+        cursor: pointer;
+        font-size: 13px;
+        transition: all var(--t-fast);
+    }
+    .save-btn { background: var(--gold-dim); color: var(--gold-light); }
+    .save-btn:hover { background: var(--gold); color: #1a1410; }
+    .del-btn { background: var(--surface-2); color: var(--text-muted); }
+    .del-btn:hover { background: rgba(255,94,94,0.2); color: #ff8585; }
+    .photo-link { color: var(--gold-light); font-size: 11px; text-decoration: underline; margin-right: 6px; }
+
+    .sunny-product-add-form {
+        margin-top: 18px;
+        padding: 14px;
+        background: var(--surface-1);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .product-form-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .product-form-row > * { min-width: 0; }
+    .btn-add-product {
+        padding: 10px;
+        background: var(--user-grad);
+        color: #1a1410;
+        border: none;
+        border-radius: var(--radius-sm);
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all var(--t-fast);
+    }
+    .btn-add-product:hover { transform: translateY(-1px); box-shadow: var(--shadow-gold); }
+
+    /* ── DRAWER : OPTIONS ──────────────────────────────────────── */
     .data-options-grid {
         display: grid;
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
         gap: 10px;
     }
-
     .data-option-item {
-        display: flex;
-        align-items: center;
-        gap: 9px;
-        padding: 10px 12px;
-        background: rgba(255,255,255,0.03);
-        border: 1px solid var(--gold-dim);
-        border-radius: var(--radius-sm);
-        cursor: pointer;
-        user-select: none;
-        transition: background var(--transition);
-    }
-    .data-option-item:hover { background: var(--gold-dim); }
-
-    .data-option-item input[type="checkbox"] {
-        accent-color: var(--gold);
-        width: 15px; height: 15px;
-        flex-shrink: 0;
-        cursor: pointer;
-    }
-
-    .data-option-item span {
-        color: var(--text-main);
-        font-size: 0.85em;
-    }
-
-    /* ── INPUT AREA ─────────────────────────────────────── */
-    .sunny-chat-input-area {
-        background: linear-gradient(180deg, var(--bg-card) 0%, rgba(28,31,38,0.98) 100%);
-        border-top: 1px solid var(--gold-border);
-        padding: 12px 16px calc(16px + var(--safe-bottom));
-        position: relative;
-    }
-
-    /* Quick suggestions */
-    .sunny-suggestions {
-        display: flex;
-        gap: 8px;
-        overflow-x: auto;
-        padding: 0 4px 12px;
-        scrollbar-width: none;
-        -ms-overflow-style: none;
-        -webkit-overflow-scrolling: touch;
-        mask-image: linear-gradient(90deg, transparent, black 4%, black 96%, transparent);
-    }
-    .sunny-suggestions::-webkit-scrollbar { display: none; }
-
-    .sunny-suggestion-pill {
-        flex-shrink: 0;
-        padding: 6px 14px;
-        background: linear-gradient(145deg, var(--gold-dim), rgba(212,175,55,0.08));
-        border: 1px solid var(--gold-border);
-        color: var(--gold);
-        border-radius: 20px;
-        font-size: 0.78em;
-        font-weight: 600;
-        cursor: pointer;
-        white-space: nowrap;
-        transition: all var(--transition);
-        position: relative;
-        overflow: hidden;
-    }
-
-    .sunny-suggestion-pill::before {
-        content: '';
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 0;
-        height: 0;
-        background: radial-gradient(circle, rgba(255,215,0,0.3) 0%, transparent 70%);
-        border-radius: 50%;
-        transform: translate(-50%, -50%);
-        transition: width 0.4s, height 0.4s;
-    }
-
-    .sunny-suggestion-pill:hover {
-        background: linear-gradient(145deg, rgba(212,175,55,0.25), rgba(212,175,55,0.15));
-        border-color: var(--gold-light);
-        box-shadow: 0 0 15px rgba(212,175,55,0.25);
-        color: var(--gold-light);
-        transform: translateY(-1px);
-    }
-
-    .sunny-suggestion-pill:hover::before {
-        width: 100px;
-        height: 100px;
-    }
-
-    .sunny-suggestion-pill:active {
-        transform: translateY(0);
-    }
-
-    /* Image preview (compact) */
-    .sunny-image-preview {
-        display: none;
-        align-items: center;
-        gap: 12px;
-        padding: 10px 14px;
-        background: linear-gradient(90deg, rgba(212,175,55,0.1), rgba(212,175,55,0.05));
-        border: 1px solid var(--gold-border);
-        border-radius: var(--radius-md);
-        margin-bottom: 10px;
-        animation: preview-in 0.3s var(--transition) both;
-    }
-
-    @keyframes preview-in {
-        from { opacity: 0; transform: translateY(-10px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-
-    .sunny-image-preview.active { display: flex; }
-
-    .sunny-image-preview img {
-        height: 48px;
-        width: 48px;
-        border-radius: 8px;
-        border: 1px solid var(--gold-border);
-        object-fit: cover;
-        flex-shrink: 0;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-    }
-
-    .sunny-image-preview .img-meta { flex: 1; min-width: 0; }
-    .sunny-image-meta-label {
-        color: var(--gold-light);
-        font-size: 0.82em;
-        font-weight: 700;
-        margin-bottom: 2px;
-    }
-    .sunny-image-meta-sub {
-        color: var(--text-muted);
-        font-size: 0.75em;
-    }
-
-    .sunny-image-remove {
-        width: 26px; height: 26px;
-        display: flex; align-items: center; justify-content: center;
-        background: linear-gradient(145deg, rgba(231,76,60,0.2), rgba(231,76,60,0.1));
-        border: 1px solid rgba(231,76,60,0.4);
-        border-radius: 50%;
-        color: #ff8585;
-        cursor: pointer;
-        font-size: 0.8em;
-        flex-shrink: 0;
-        transition: all var(--transition);
-    }
-    .sunny-image-remove:hover { 
-        background: rgba(231,76,60,0.4);
-        transform: scale(1.1);
-    }
-
-    /* Unified input row */
-    .sunny-input-unified {
-        display: flex;
-        align-items: flex-end;
-        gap: 10px;
-        background: linear-gradient(145deg, rgba(35,39,48,0.8), rgba(35,39,48,0.6));
-        border: 1.5px solid var(--gold-border);
-        border-radius: 16px;
-        padding: 8px 10px 8px 8px;
-        transition: all var(--transition);
-        position: relative;
-    }
-    .sunny-input-unified:focus-within {
-        border-color: var(--gold-light);
-        box-shadow: 
-            0 0 0 3px rgba(212,175,55,0.15),
-            0 0 20px rgba(212,175,55,0.1);
-        background: linear-gradient(145deg, rgba(35,39,48,0.95), rgba(35,39,48,0.8));
-    }
-
-    /* Attachment menu button */
-    .sunny-attach-btn {
-        width: 40px; height: 40px;
-        display: flex; align-items: center; justify-content: center;
-        background: linear-gradient(145deg, var(--gold-dim), rgba(212,175,55,0.08));
-        border: 1px solid var(--gold-border);
-        border-radius: 12px;
-        color: var(--gold);
-        cursor: pointer;
-        font-size: 1.2em;
-        flex-shrink: 0;
-        transition: all var(--transition);
-        position: relative;
-    }
-    .sunny-attach-btn:hover { 
-        background: linear-gradient(145deg, rgba(212,175,55,0.25), rgba(212,175,55,0.15));
-        border-color: var(--gold-light);
-        transform: scale(1.05);
-    }
-    .sunny-attach-btn.active {
-        background: linear-gradient(145deg, rgba(212,175,55,0.3), rgba(212,175,55,0.2));
-        border-color: var(--gold-light);
-        box-shadow: 0 0 15px rgba(212,175,55,0.2);
-    }
-
-    /* Attachment dropdown */
-    .sunny-attach-menu {
-        position: absolute;
-        bottom: calc(100% + 10px);
-        left: 0;
-        background: linear-gradient(180deg, var(--bg-card), rgba(28,31,38,0.98));
-        border: 1px solid var(--gold-border);
-        border-radius: var(--radius-md);
-        padding: 8px;
-        display: none;
-        flex-direction: column;
-        gap: 4px;
-        z-index: 100;
-        min-width: 180px;
-        box-shadow: 0 12px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(212,175,55,0.1);
-        animation: menu-in 0.2s var(--transition) both;
-        backdrop-filter: blur(10px);
-    }
-    @keyframes menu-in {
-        from { opacity:0; transform: translateY(10px) scale(0.95); }
-        to   { opacity:1; transform: translateY(0) scale(1); }
-    }
-    .sunny-attach-menu.open { display: flex; }
-
-    .attach-menu-item {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 10px 12px;
-        border-radius: var(--radius-sm);
-        cursor: pointer;
-        color: var(--text-main);
-        font-size: 0.86em;
-        font-weight: 500;
-        transition: all var(--transition);
-        border: 1px solid transparent;
-    }
-    .attach-menu-item:hover {
-        background: var(--gold-dim);
-        color: var(--gold-light);
-        border-color: var(--gold-border);
-    }
-    .attach-menu-item .item-icon { 
-        font-size: 1.2em;
-        filter: drop-shadow(0 1px 2px rgba(0,0,0,0.2));
-    }
-
-    /* Hidden file inputs */
-    .sunny-file-input { display: none; }
-
-    /* Textarea */
-    .sunny-input-unified textarea {
-        flex: 1;
-        background: transparent;
-        border: none;
-        color: var(--text-main);
-        padding: 8px 6px;
-        font-family: inherit;
-        font-size: 0.96em;
-        resize: none;
-        min-height: 40px;
-        max-height: 140px;
-        line-height: 1.5;
-        -webkit-appearance: none;
-    }
-    .sunny-input-unified textarea:focus { outline: none; }
-    .sunny-input-unified textarea::placeholder { 
-        color: var(--text-muted);
-        opacity: 0.7;
-    }
-
-    /* Send button */
-    .sunny-send-btn {
-        width: 40px; height: 40px;
-        background: linear-gradient(135deg, #c9a43f 0%, var(--gold-light) 50%, #b8942c 100%);
-        color: #1a1600;
-        border: none;
-        border-radius: 12px;
-        cursor: pointer;
-        font-size: 1.1em;
-        flex-shrink: 0;
-        display: flex; align-items: center; justify-content: center;
-        transition: all var(--transition);
-        font-weight: 700;
-        position: relative;
-        overflow: hidden;
-        box-shadow: 0 2px 8px rgba(212,175,55,0.3);
-    }
-
-    .sunny-send-btn::after {
-        content: '';
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 0;
-        height: 0;
-        background: radial-gradient(circle, rgba(255,255,255,0.4) 0%, transparent 70%);
-        border-radius: 50%;
-        transform: translate(-50%, -50%);
-        transition: width 0.4s, height 0.4s;
-    }
-
-    .sunny-send-btn:hover:not(:disabled) {
-        box-shadow: 0 4px 20px rgba(255,215,0,0.5);
-        transform: scale(1.08);
-    }
-
-    .sunny-send-btn:hover::after {
-        width: 80px;
-        height: 80px;
-    }
-
-    .sunny-send-btn:active:not(:disabled) {
-        transform: scale(0.95);
-    }
-
-    .sunny-send-btn:disabled { 
-        opacity: 0.3; 
-        cursor: not-allowed; 
-        transform: none;
-        box-shadow: none;
-    }
-
-    /* ── RESPONSIVE ─────────────────────────────────────── */
-    /* Tablet */
-    @media (max-width: 768px) {
-        .sunny-chat-wrapper {
-            margin: 10px;
-            border-radius: var(--radius-lg);
-        }
-        .sunny-chat-messages {
-            height: min(55vh, 420px);
-            padding: 16px;
-        }
-        .sunny-drawer {
-            max-height: 80%;
-        }
-    }
-
-    /* Mobile */
-    @media (max-width: 580px) {
-        .sunny-chat-wrapper {
-            margin: 0;
-            border-radius: 0;
-            max-width: 100%;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .sunny-chat-header {
-            padding: 12px 14px;
-            gap: 10px;
-        }
-
-        .sunny-avatar {
-            width: 40px;
-            height: 40px;
-            font-size: 1.2em;
-        }
-
-        .sunny-chat-header h3 {
-            font-size: 0.95em;
-        }
-
-        .sunny-hdr-btn {
-            width: 32px;
-            height: 32px;
-            font-size: 0.9em;
-        }
-
-        .sunny-chat-messages {
-            flex: 1;
-            height: auto;
-            min-height: 250px;
-            padding: 14px;
-            gap: 12px;
-        }
-
-        .chat-bubble {
-            max-width: 92%;
-            padding: 10px 14px;
-            font-size: 0.92em;
-        }
-
-        .sunny-chat-input-area {
-            padding: 10px 12px calc(12px + var(--safe-bottom));
-        }
-
-        .sunny-suggestions {
-            gap: 6px;
-        }
-
-        .sunny-suggestion-pill {
-            padding: 5px 12px;
-            font-size: 0.75em;
-        }
-
-        .sunny-input-unified {
-            padding: 6px 8px 6px 6px;
-        }
-
-        .sunny-attach-btn {
-            width: 36px;
-            height: 36px;
-        }
-
-        .sunny-send-btn {
-            width: 36px;
-            height: 36px;
-        }
-
-        .sunny-input-unified textarea {
-            font-size: 16px; /* Prevent zoom on iOS */
-        }
-
-        .sunny-drawer {
-            max-height: 90%;
-            border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-        }
-
-        .analyse-grid {
-            grid-template-columns: repeat(2, 1fr);
-            gap: 8px;
-        }
-
-        .data-options-grid {
-            grid-template-columns: 1fr;
-        }
-
-        .sunny-drawer-body {
-            padding: 12px 16px calc(12px + var(--safe-bottom));
-        }
-    }
-
-    /* Small mobile */
-    @media (max-width: 380px) {
-        .sunny-chat-header h3 {
-            font-size: 0.9em;
-        }
-
-        .sunny-pool-selector-wrap select {
-            max-width: 140px;
-            font-size: 0.75em;
-        }
-
-        .chat-bubble {
-            max-width: 95%;
-            padding: 9px 12px;
-        }
-    }
-
-    /* Reduced motion preference */
-    @media (prefers-reduced-motion: reduce) {
-        *, *::before, *::after {
-            animation-duration: 0.01ms !important;
-            animation-iteration-count: 1 !important;
-            transition-duration: 0.01ms !important;
-        }
-    }
-
-    /* Focus visible for accessibility */
-    .sunny-chat-wrapper *:focus-visible {
-        outline: 2px solid var(--gold-light);
-        outline-offset: 2px;
-    }
-
-    button:focus-visible,
-    select:focus-visible,
-    input:focus-visible,
-    textarea:focus-visible {
-        outline: 2px solid var(--gold-light);
-        outline-offset: 2px;
-    }
-
-    /* ── TOAST NOTIFICATIONS ─────────────────────────────── */
-    .sunny-toast-container {
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        z-index: 1000;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        pointer-events: none;
-    }
-
-    .sunny-toast {
-        background: linear-gradient(145deg, var(--bg-card), rgba(28,31,38,0.98));
-        border: 1px solid var(--gold-border);
-        border-radius: var(--radius-md);
-        padding: 12px 16px;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(212,175,55,0.1);
-        animation: toast-in 0.3s var(--transition) both;
-        pointer-events: auto;
-        max-width: 320px;
-    }
-
-    @keyframes toast-in {
-        from { opacity: 0; transform: translateX(30px); }
-        to { opacity: 1; transform: translateX(0); }
-    }
-
-    @keyframes toast-out {
-        from { opacity: 1; transform: translateX(0); }
-        to { opacity: 0; transform: translateX(30px); }
-    }
-
-    .sunny-toast.hiding {
-        animation: toast-out 0.2s var(--transition) both;
-    }
-
-    .sunny-toast-icon {
-        font-size: 1.2em;
-        flex-shrink: 0;
-    }
-
-    .sunny-toast-content {
-        flex: 1;
-        color: var(--text-main);
-        font-size: 0.88em;
-        line-height: 1.4;
-    }
-
-    .sunny-toast-close {
-        background: none;
-        border: none;
-        color: var(--text-muted);
-        cursor: pointer;
-        font-size: 1em;
-        padding: 4px;
-        transition: color var(--transition);
-    }
-
-    .sunny-toast-close:hover {
-        color: var(--gold-light);
-    }
-
-    /* Toast types */
-    .sunny-toast.success { border-color: rgba(46,204,113,0.5); }
-    .sunny-toast.success .sunny-toast-icon { color: #2ecc71; }
-
-    .sunny-toast.error { border-color: rgba(231,76,60,0.5); }
-    .sunny-toast.error .sunny-toast-icon { color: #e74c3c; }
-
-    .sunny-toast.warning { border-color: rgba(243,156,18,0.5); }
-    .sunny-toast.warning .sunny-toast-icon { color: #f39c12; }
-
-    /* ── EMPTY STATES ─────────────────────────────────────── */
-    .sunny-empty-state {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 40px 20px;
-        text-align: center;
-        color: var(--text-muted);
-    }
-
-    .sunny-empty-state-icon {
-        font-size: 3em;
-        margin-bottom: 16px;
-        opacity: 0.6;
-        filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2));
-    }
-
-    .sunny-empty-state-text {
-        font-size: 0.95em;
-        max-width: 260px;
-        line-height: 1.5;
-    }
-
-    /* ── LOADING STATES ──────────────────────────────────── */
-    .sunny-loading-dots {
-        display: flex;
-        gap: 4px;
-        align-items: center;
-        justify-content: center;
-        padding: 20px;
-    }
-
-    .sunny-loading-dots span {
-        width: 8px;
-        height: 8px;
-        background: var(--gold);
-        border-radius: 50%;
-        animation: loading-dot 1.4s ease-in-out infinite both;
-    }
-
-    .sunny-loading-dots span:nth-child(1) { animation-delay: -0.32s; }
-    .sunny-loading-dots span:nth-child(2) { animation-delay: -0.16s; }
-
-    @keyframes loading-dot {
-        0%, 80%, 100% { transform: scale(0.6); opacity: 0.5; }
-        40% { transform: scale(1); opacity: 1; }
-    }
-
-    /* ── DRAWER : DISCUSSIONS (THREADS) ────────────────── */
-    .sunny-threads-header-bar {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 0 0 14px;
-    }
-
-    .sunny-new-thread-btn {
-        flex: 1;
-        padding: 10px 16px;
-        background: linear-gradient(135deg, #c9a43f 0%, var(--gold-light) 100%);
-        color: #1a1600;
-        border: none;
-        border-radius: var(--radius-sm);
-        font-size: 0.85em;
-        font-weight: 700;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        transition: all var(--transition);
-        box-shadow: 0 2px 8px rgba(212,175,55,0.3);
-    }
-    .sunny-new-thread-btn:hover {
-        box-shadow: 0 4px 16px rgba(255,215,0,0.5);
-        transform: translateY(-1px);
-    }
-    .sunny-new-thread-btn:active {
-        transform: translateY(0);
-    }
-
-    .sunny-threads-list {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        max-height: 360px;
-        overflow-y: auto;
-    }
-
-    .sunny-thread-item {
         display: flex;
         align-items: center;
         gap: 10px;
         padding: 12px 14px;
-        background: rgba(255,255,255,0.03);
-        border: 1px solid var(--gold-dim);
-        border-radius: var(--radius-sm);
+        background: var(--surface-1);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius);
         cursor: pointer;
-        transition: all var(--transition);
-        position: relative;
-        overflow: hidden;
+        transition: all var(--t-fast) var(--ease);
+        font-size: 13.5px;
+        color: var(--text-main);
     }
-    .sunny-thread-item:hover {
+    .data-option-item:hover { background: var(--surface-2); border-color: var(--gold-border); }
+    .data-option-item input[type="checkbox"] {
+        width: 18px; height: 18px;
+        accent-color: var(--gold);
+        cursor: pointer;
+    }
+    .data-option-item:has(input:checked) {
         background: var(--gold-dim);
         border-color: var(--gold-border);
     }
+
+    /* ── DRAWER : THREADS ──────────────────────────────────────── */
+    .sunny-threads-header-bar { margin-bottom: 14px; }
+    .sunny-new-thread-btn {
+        width: 100%;
+        padding: 12px;
+        background: var(--user-grad);
+        color: #1a1410;
+        border: none;
+        border-radius: var(--radius);
+        font-family: inherit;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+        box-shadow: var(--shadow-gold);
+        transition: all var(--t-fast) var(--ease);
+    }
+    .sunny-new-thread-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 24px var(--gold-glow); }
+
+    .sunny-threads-list { display: flex; flex-direction: column; gap: 6px; }
+    .sunny-threads-empty {
+        padding: 40px 20px;
+        text-align: center;
+        color: var(--text-muted);
+    }
+    .sunny-threads-empty-icon { font-size: 40px; margin-bottom: 10px; opacity: 0.6; }
+    .sunny-threads-empty-text { font-size: 13.5px; line-height: 1.6; }
+
+    .sunny-thread-item {
+        padding: 12px 14px;
+        background: var(--surface-1);
+        border: 1px solid transparent;
+        border-radius: var(--radius);
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        transition: all var(--t-fast) var(--ease);
+    }
+    .sunny-thread-item:hover { background: var(--surface-2); border-color: var(--glass-border); }
     .sunny-thread-item.active {
-        background: linear-gradient(135deg, rgba(212,175,55,0.15), rgba(212,175,55,0.08));
-        border-color: var(--gold);
-        box-shadow: 0 0 12px rgba(212,175,55,0.15);
+        background: var(--gold-dim);
+        border-color: var(--gold-border);
+        color: var(--gold-light);
     }
-    .sunny-thread-item.active::before {
-        content: '';
-        position: absolute;
-        left: 0;
-        top: 0;
-        bottom: 0;
-        width: 3px;
-        background: linear-gradient(180deg, var(--gold), var(--gold-light));
-        border-radius: 0 3px 3px 0;
+    .sunny-thread-title { font-size: 13.5px; font-weight: 500; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sunny-thread-meta { font-size: 11px; color: var(--text-muted); }
+    .sunny-thread-del {
+        width: 26px; height: 26px;
+        border: none;
+        background: transparent;
+        color: var(--text-faint);
+        border-radius: 50%;
+        cursor: pointer;
+        opacity: 0;
+        transition: all var(--t-fast);
     }
+    .sunny-thread-item:hover .sunny-thread-del { opacity: 1; }
+    .sunny-thread-del:hover { background: rgba(255,94,94,0.2); color: #ff8585; }
 
-    .sunny-thread-icon {
-        font-size: 1.2em;
-        flex-shrink: 0;
-        opacity: 0.7;
+    /* ── EMPTY STATES ──────────────────────────────────────────── */
+    .sunny-empty-state {
+        padding: 40px 16px;
+        text-align: center;
+        color: var(--text-muted);
     }
+    .sunny-empty-state-icon { font-size: 44px; margin-bottom: 12px; opacity: 0.6; }
+    .sunny-empty-state-text { font-size: 14px; line-height: 1.6; }
 
-    .sunny-thread-info {
-        flex: 1;
-        min-width: 0;
-    }
-
-    .sunny-thread-title {
-        color: var(--text-main);
-        font-size: 0.88em;
-        font-weight: 600;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    .sunny-thread-meta {
+    /* ── MODAL ANALYSE ─────────────────────────────────────────── */
+    .sunny-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.65);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        z-index: 9000;
         display: flex;
         align-items: center;
-        gap: 8px;
-        margin-top: 3px;
+        justify-content: center;
+        padding: 20px;
+        animation: fade-in var(--t-base) var(--ease);
+    }
+    .sunny-modal-backdrop.closing { animation: fade-out var(--t-base) var(--ease) forwards; }
+    @keyframes fade-in  { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
+
+    .sunny-modal {
+        background: var(--bg-card);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-lg);
+        width: 100%;
+        max-width: 560px;
+        max-height: 90vh;
+        display: flex;
+        flex-direction: column;
+        box-shadow: var(--shadow-lg);
+        animation: modal-in var(--t-slow) var(--ease-spring);
+    }
+    @keyframes modal-in {
+        from { opacity: 0; transform: scale(0.92) translateY(20px); }
+        to   { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .sunny-modal-header {
+        padding: 20px 24px;
+        border-bottom: 1px solid var(--glass-border);
+        display: flex; justify-content: space-between; align-items: center;
+    }
+    .sunny-modal-body { padding: 20px 24px; overflow-y: auto; flex: 1; }
+    .sunny-modal-footer { padding: 16px 24px; border-top: 1px solid var(--glass-border); display: flex; justify-content: flex-end; gap: 10px; }
+    .sunny-modal-close, .btn-close-modal {
+        width: 32px; height: 32px; border: none; border-radius: 50%;
+        background: var(--surface-2); color: var(--text-muted); cursor: pointer;
+        transition: all var(--t-fast);
+    }
+    .btn-close-modal { width: auto; height: auto; padding: 8px 18px; border-radius: 999px; font-size: 13px; }
+    .sunny-modal-close:hover, .btn-close-modal:hover { background: var(--surface-3); color: var(--text-main); }
+    .modal-alertes { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+    .modal-alerte { padding: 10px 14px; border-radius: var(--radius); display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; border-left: 3px solid; }
+    .modal-alerte.faible  { border-color: #f5d76e; background: rgba(245,215,110,0.08); color: #f5d76e; }
+    .modal-alerte.moyenne { border-color: #ff9f43; background: rgba(255,159,67,0.10); color: #ffb976; }
+    .modal-alerte.haute   { border-color: #ff5e5e; background: rgba(255,94,94,0.12); color: #ff8585; }
+
+    /* ── TOASTS ────────────────────────────────────────────────── */
+    .sunny-toast-container {
+        position: fixed;
+        top: 20px; right: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        z-index: 10000;
+        pointer-events: none;
+    }
+    .sunny-toast {
+        background: var(--glass-bg);
+        backdrop-filter: var(--glass-blur);
+        -webkit-backdrop-filter: var(--glass-blur);
+        border: 1px solid var(--glass-border);
+        border-left: 3px solid var(--gold);
+        color: var(--text-main);
+        padding: 12px 18px;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-lg);
+        font-size: 13.5px;
+        font-weight: 500;
+        min-width: 240px;
+        max-width: 360px;
+        pointer-events: auto;
+        animation: toast-in var(--t-slow) var(--ease-spring);
+    }
+    .sunny-toast.success { border-left-color: #2ecc71; }
+    .sunny-toast.error   { border-left-color: #ff5e5e; }
+    .sunny-toast.info    { border-left-color: var(--gold); }
+    .sunny-toast.warning { border-left-color: #ff9f43; }
+    .sunny-toast.hiding  { animation: toast-out var(--t-base) var(--ease) forwards; }
+    @keyframes toast-in {
+        from { opacity: 0; transform: translateX(40px) scale(0.9); }
+        to   { opacity: 1; transform: translateX(0) scale(1); }
+    }
+    @keyframes toast-out {
+        to { opacity: 0; transform: translateX(40px); }
     }
 
-    .sunny-thread-date {
-        color: var(--text-muted);
-        font-size: 0.72em;
+    .sunny-loading-dots::after {
+        content: '...';
+        display: inline-block;
+        animation: loading-dots 1.4s infinite;
+    }
+    @keyframes loading-dots {
+        0%, 20%   { content: '.'; }
+        40%       { content: '..'; }
+        60%, 100% { content: '...'; }
     }
 
-    .sunny-thread-badge {
-        background: var(--gold-dim);
-        color: var(--gold);
-        padding: 1px 6px;
-        border-radius: 10px;
-        font-size: 0.68em;
-        font-weight: 700;
+    /* ════════════════════════════════════════════════════════════
+       RESPONSIVE — TABLETTE & MOBILE
+       ════════════════════════════════════════════════════════════ */
+    @media (max-width: 900px) {
+        .sunny-chat-wrapper {
+            grid-template-columns: 1fr;
+            grid-template-areas:
+                "header"
+                "main";
+        }
+        .sunny-sidebar { display: none; }
     }
 
-    .sunny-thread-preview {
-        color: var(--text-muted);
-        font-size: 0.75em;
+    @media (max-width: 720px) {
+        :root { --header-h: 58px; }
+        .sunny-chat-wrapper {
+            grid-template-rows: var(--header-h) 1fr var(--mobilenav-h);
+            grid-template-areas:
+                "header"
+                "main"
+                "mobilenav";
+            padding-bottom: env(safe-area-inset-bottom, 0);
+        }
+
+        .sunny-chat-header { padding: 0 14px; gap: 10px; }
+        .sunny-avatar { width: 36px; height: 36px; font-size: 18px; }
+        .sunny-header-info h3 { font-size: 14px; }
+        .sunny-header-actions { display: none; }
+
+        .sunny-mobile-nav {
+            display: flex !important;
+            position: relative;
+            grid-area: mobilenav;
+            bottom: auto; left: auto; right: auto;
+        }
+
+        .sunny-chat-messages { padding: 16px 14px 12px; gap: 10px; }
+        .chat-bubble { max-width: 88%; font-size: 14px; }
+        .chat-bubble.sunny .sunny-rich-section { padding: 9px 10px; }
+        .chat-bubble.sunny .sunny-rich-link { width: 100%; justify-content: center; }
+        .sunny-chat-input-area { padding: 8px 12px 12px; }
+
+        .sunny-drawer {
+            top: auto;
+            bottom: 0;
+            right: 0; left: 0;
+            width: 100%;
+            height: min(86vh, 86dvh);
+            border-left: none;
+            border-top: 1px solid var(--glass-border);
+            border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+            transform: translateY(105%);
+        }
+        .sunny-drawer.open { transform: translateY(0); }
+        .sunny-drawer-handle { display: block; }
+        .sunny-drawer-header { padding: 12px 18px 14px; }
+
+        .sunny-suggestions { padding-bottom: 8px; }
+        .sunny-suggestion-pill { font-size: 12px; padding: 6px 12px; }
+
+        .sunny-toast-container { top: 12px; left: 12px; right: 12px; }
+        .sunny-toast { min-width: 0; max-width: none; }
+    }
+
+    /* ════════════════════════════════════════════════════════════
+       PREFERS-REDUCED-MOTION
+       ════════════════════════════════════════════════════════════ */
+    @media (prefers-reduced-motion: reduce) {
+        .sunny-chat-wrapper *,
+        .sunny-chat-wrapper *::before,
+        .sunny-chat-wrapper *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+            scroll-behavior: auto !important;
+        }
+        .sunny-chat-wrapper::before,
+        .sunny-chat-wrapper::after { display: none; }
+    }
+
+    /* ── ACCESSIBILITY ─────────────────────────────────────────── */
+    .sunny-chat-wrapper button:focus-visible,
+    .sunny-chat-wrapper select:focus-visible,
+    .sunny-chat-wrapper input:focus-visible,
+    .sunny-chat-wrapper textarea:focus-visible {
+        outline: 2px solid var(--gold-light);
+        outline-offset: 2px;
+    }
+    .sunny-chat-wrapper button { -webkit-tap-highlight-color: transparent; }
+
+    /* Neutralise les CSS de thème WP qui pourraient casser */
+    .sunny-chat-wrapper .select2-container { display: none !important; }
+    body.sunny-chat-active { overflow: hidden; }
+
+    /* ── FIX : neutralise les styles de boutons héritées du thème WP ── */
+    .sunny-chat-wrapper .sunny-sidebar button,
+    .sunny-chat-wrapper .sunny-mobile-nav button {
+        background-image: none !important;
+        text-transform: none !important;
+        letter-spacing: normal !important;
+        box-shadow: none;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        line-height: 1 !important;
+    }
+    .sunny-chat-wrapper .sunny-sidebar-btn {
+        background: var(--user-grad) !important;
+        box-shadow: var(--shadow-gold);
+        color: #1a1410 !important;
+        font-size: 0 !important;
+        overflow: hidden;
         white-space: nowrap;
+        padding: 0 !important;
+    }
+    .sunny-chat-wrapper .sunny-sidebar.expanded .sunny-sidebar-btn {
+        font-size: 13px !important;
+        padding: 0 14px !important;
+    }
+    .sunny-chat-wrapper .sunny-sidebar-link {
+        background: transparent !important;
+        color: var(--text-muted) !important;
+        font-size: 0 !important;
+        overflow: hidden;
+        white-space: nowrap;
+        padding: 0 !important;
+    }
+    .sunny-chat-wrapper .sunny-sidebar.expanded .sunny-sidebar-link {
+        font-size: 13px !important;
+        padding: 0 14px !important;
+    }
+    .sunny-chat-wrapper .sunny-sidebar-link:hover {
+        background: var(--surface-2) !important;
+        color: var(--gold-light) !important;
+    }
+    /* Ré-affiche uniquement les icônes Material Symbols */
+    .sunny-chat-wrapper .sunny-sidebar-btn .material-symbols-outlined,
+    .sunny-chat-wrapper .sunny-sidebar-link .material-symbols-outlined {
+        font-size: 24px !important;
+    }
+    .sunny-chat-wrapper .sunny-sidebar-btn .material-symbols-outlined { font-size: 26px !important; }
+    /* Labels visibles quand sidebar expanded */
+    .sunny-chat-wrapper .sunny-sidebar .sidebar-label { display: none !important; color: var(--text-muted) !important; }
+    .sunny-chat-wrapper .sunny-sidebar.expanded .sidebar-label { display: inline !important; color: inherit !important; }
+    .sunny-chat-wrapper .sunny-sidebar-btn .sidebar-label { color: #1a1410 !important; }
+    .sunny-chat-wrapper .sunny-sidebar-logout .sidebar-label { color: var(--text-muted) !important; }
+    .sunny-chat-wrapper .sunny-sidebar.expanded .sunny-sidebar-logout { font-size: 13px !important; padding: 0 14px !important; }
+    /* Toggle button visible */
+    .sunny-chat-wrapper .sunny-sidebar-toggle { color: var(--text-main) !important; background: var(--surface-2) !important; }
+    .sunny-chat-wrapper .sunny-sidebar-toggle:hover { color: var(--gold-light) !important; background: var(--surface-3) !important; }
+    /* Section labels visibles quand expanded */
+    .sunny-chat-wrapper .sunny-sidebar-section-label { display: none !important; color: var(--text-faint) !important; }
+    .sunny-chat-wrapper .sunny-sidebar.expanded .sunny-sidebar-section-label { display: block !important; }
+
+    /* Mobile bottom nav : neutralise styles thème */
+    .sunny-chat-wrapper .sunny-mobile-nav-btn {
+        background: transparent !important;
+        border-radius: 12px !important;
+        padding: 6px 8px !important;
+        text-transform: none !important;
+        font-weight: 500 !important;
+        color: var(--text-muted) !important;
+    }
+    .sunny-chat-wrapper .sunny-mobile-nav-btn:hover {
+        color: var(--text-main) !important;
+    }
+
+    /* ── FIX : <option> lisibles dans tous les <select> ── */
+    .sunny-chat-wrapper select option,
+    .sunny-chat-wrapper select optgroup {
+        background: #1a1d24 !important;
+        color: #f5f5f5 !important;
+    }
+
+    /* ── FIX : actions thread (renommer / supprimer) ── */
+    .sunny-thread-item { position: relative; }
+    .sunny-thread-icon {
+        flex-shrink: 0;
+        width: 28px; height: 28px;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 16px;
+        background: var(--surface-2);
+        border-radius: 50%;
+    }
+    .sunny-thread-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .sunny-thread-preview {
+        font-size: 11.5px;
+        color: var(--text-muted);
         overflow: hidden;
         text-overflow: ellipsis;
-        margin-top: 2px;
+        white-space: nowrap;
     }
-
+    .sunny-thread-meta { display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--text-muted); }
+    .sunny-thread-badge {
+        padding: 1px 7px;
+        background: var(--gold-dim);
+        color: var(--gold-light);
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 600;
+    }
     .sunny-thread-actions {
         display: flex;
         gap: 4px;
-        opacity: 0;
-        transition: opacity var(--transition);
         flex-shrink: 0;
+        opacity: 0;
+        transition: opacity var(--t-fast);
     }
-    .sunny-thread-item:hover .sunny-thread-actions {
-        opacity: 1;
-    }
-
+    .sunny-thread-item:hover .sunny-thread-actions,
+    .sunny-thread-item.active .sunny-thread-actions { opacity: 1; }
     .sunny-thread-action-btn {
-        width: 26px; height: 26px;
-        display: flex; align-items: center; justify-content: center;
-        background: rgba(255,255,255,0.05);
-        border: 1px solid var(--gold-dim);
-        border-radius: 6px;
-        color: var(--text-muted);
+        width: 28px; height: 28px;
+        border: none;
+        background: var(--surface-2) !important;
+        color: var(--text-muted) !important;
+        border-radius: 50%;
         cursor: pointer;
-        font-size: 0.75em;
-        transition: all var(--transition);
-    }
-    .sunny-thread-action-btn:hover {
-        background: var(--gold-dim);
-        color: var(--gold-light);
-        border-color: var(--gold-border);
-    }
-    .sunny-thread-action-btn.delete:hover {
-        background: rgba(231,76,60,0.15);
-        color: #ff8585;
-        border-color: rgba(231,76,60,0.4);
-    }
-
-    .sunny-threads-empty {
-        text-align: center;
-        padding: 30px 20px;
-        color: var(--text-muted);
-    }
-    .sunny-threads-empty-icon {
-        font-size: 2.5em;
-        margin-bottom: 10px;
-        opacity: 0.5;
-    }
-    .sunny-threads-empty-text {
-        font-size: 0.88em;
-        line-height: 1.5;
-    }
-
-    /* Thread indicator in header */
-    .sunny-thread-indicator {
         display: inline-flex;
         align-items: center;
-        gap: 4px;
-        background: var(--gold-dim);
-        border: 1px solid var(--gold-border);
-        border-radius: 12px;
-        padding: 2px 8px;
-        font-size: 0.72em;
-        color: var(--gold);
-        font-weight: 600;
-        max-width: 150px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        cursor: pointer;
-        transition: all var(--transition);
+        justify-content: center;
+        font-size: 13px !important;
+        line-height: 1 !important;
+        padding: 0 !important;
+        min-width: 0 !important;
+        transition: all var(--t-fast);
     }
-    .sunny-thread-indicator:hover {
-        background: rgba(212,175,55,0.25);
-        border-color: var(--gold-light);
+    .sunny-thread-action-btn::before { content: attr(data-emoji); }
+    .sunny-thread-action-btn:hover { background: var(--surface-3) !important; color: var(--text-main) !important; }
+    .sunny-thread-action-btn.delete:hover { background: rgba(255,94,94,0.2) !important; color: #ff8585 !important; }
+
+    /* ── FOLDERS ── */
+    .sunny-folders-section { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+    .sunny-folders-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 4px 2px; font-size: 11px; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted);
+    }
+    .sunny-new-folder-btn {
+        background: transparent; border: 1px dashed var(--glass-border);
+        color: var(--text-muted); border-radius: 8px; padding: 4px 10px;
+        font-size: 11px; cursor: pointer; transition: all .2s ease;
+        display: inline-flex; align-items: center; gap: 4px;
+    }
+    .sunny-new-folder-btn:hover { color: var(--gold); border-color: var(--gold); background: var(--gold-dim); }
+
+    .sunny-folder-item {
+        background: var(--surface-1); border: 1px solid var(--glass-border);
+        border-radius: 12px; overflow: hidden; transition: border-color .2s ease;
+    }
+    .sunny-folder-item:hover { border-color: var(--gold-dim); }
+    .sunny-folder-head {
+        display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+        cursor: pointer; user-select: none; position: relative;
+    }
+    .sunny-folder-caret {
+        display: inline-block; width: 14px; transition: transform .2s ease;
+        color: var(--text-muted); font-size: 10px;
+    }
+    .sunny-folder-item.open .sunny-folder-caret { transform: rotate(90deg); }
+    .sunny-folder-icon { font-size: 16px; }
+    .sunny-folder-name {
+        flex: 1; min-width: 0; font-size: 13.5px; font-weight: 500;
+        color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .sunny-folder-count {
+        font-size: 11px; color: var(--text-muted); background: var(--surface-2);
+        padding: 2px 7px; border-radius: 10px;
+    }
+    .sunny-folder-actions {
+        display: flex; gap: 4px; opacity: 0; transition: opacity .2s ease;
+    }
+    .sunny-folder-item:hover .sunny-folder-actions { opacity: 1; }
+    .sunny-folder-body {
+        display: none; padding: 4px 8px 10px 8px;
+        border-top: 1px solid var(--glass-border); background: var(--surface-0, rgba(0,0,0,0.15));
+    }
+    .sunny-folder-item.open .sunny-folder-body { display: flex; flex-direction: column; gap: 4px; }
+    .sunny-folder-empty {
+        font-size: 12px; color: var(--text-muted); text-align: center;
+        padding: 8px 4px; font-style: italic;
+    }
+    .sunny-folder-new-thread {
+        background: transparent; border: 1px dashed var(--glass-border);
+        color: var(--text-muted); border-radius: 8px; padding: 6px 10px;
+        font-size: 12px; cursor: pointer; transition: all .2s ease;
+        margin: 4px 0 0 0; text-align: left;
+    }
+    .sunny-folder-new-thread:hover { color: var(--gold); border-color: var(--gold); background: var(--gold-dim); }
+    .sunny-folder-item .sunny-thread-item { background: transparent; border-color: transparent; }
+    .sunny-folder-item .sunny-thread-item:hover { background: var(--surface-2); border-color: var(--glass-border); }
+
+    /* ── FIX : produits — alignement et icônes visibles ── */
+    .sunny-product-item { flex-wrap: wrap; }
+    .sunny-product-item .product-info { flex: 1 1 100%; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .sunny-product-item .product-controls {
+        flex: 1 1 100%;
+        flex-wrap: wrap;
+        gap: 6px;
+        justify-content: flex-end;
+        align-items: center;
+    }
+    .sunny-chat-wrapper .save-btn,
+    .sunny-chat-wrapper .del-btn {
+        background: var(--surface-2) !important;
+        color: var(--text-main) !important;
+        font-size: 14px !important;
+        line-height: 1 !important;
+        padding: 0 !important;
+        min-width: 30px !important;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .sunny-chat-wrapper .save-btn { background: var(--gold-dim) !important; color: var(--gold-light) !important; }
+    .sunny-chat-wrapper .save-btn:hover { background: var(--gold) !important; color: #1a1410 !important; }
+    .sunny-chat-wrapper .del-btn:hover { background: rgba(255,94,94,0.2) !important; color: #ff8585 !important; }
+    .sunny-chat-wrapper .photo-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px; height: 30px;
+        border-radius: 50%;
+        background: var(--surface-2);
+        text-decoration: none !important;
+        font-size: 14px;
+    }
+
+    @media (min-width: 600px) {
+        .sunny-product-item { flex-wrap: nowrap; }
+        .sunny-product-item .product-info { flex: 1 1 auto; }
+        .sunny-product-item .product-controls { flex: 0 0 auto; }
     }
     </style>
+
 
     <!-- ===== HTML ===== -->
 
@@ -2003,13 +1783,14 @@ function sunny_chat_shortcode() {
     <div class="sunny-toast-container" id="sunny-toast-container"></div>
 
     <!-- Header -->
-    <div class="sunny-chat-header" role="banner">
+    <header class="sunny-chat-header" role="banner">
         <div class="sunny-avatar" aria-label="Sunny Avatar">🌞</div>
         <div class="sunny-header-info">
-            <h3>Sunny — Expert Piscine</h3>
+            <h3>Sunny Chat Expert</h3>
             <div class="sunny-status-row">
-                <span class="sunny-status-dot"></span>
-                <span class="sunny-thread-indicator" id="sunny-thread-indicator" onclick="sunnyOpenDrawer('threads')" title="Discussion en cours">💬 Nouvelle discussion</span>
+                <span class="sunny-status-text" id="sunny-thread-indicator" onclick="sunnyOpenDrawer('threads')" style="cursor:pointer;">
+                    💬 Nouvelle discussion
+                </span>
                 <?php if (count($pools) > 1) : ?>
                 <div class="sunny-pool-selector-wrap">
                     <select id="sunny-pool-selector" class="no-select2 ignore-select2 wpo-select2-ignore">
@@ -2028,59 +1809,157 @@ function sunny_chat_shortcode() {
             </div>
         </div>
         <div class="sunny-header-actions">
-            <button class="sunny-hdr-btn" id="hdr-threads-btn" onclick="sunnyOpenDrawer('threads')" title="Mes discussions" data-emoji="💬"></button>
-            <button class="sunny-hdr-btn" id="hdr-analyse-btn" onclick="sunnyOpenDrawer('analyse')" title="Mesures d'eau" data-emoji="📊"></button>
-            <button class="sunny-hdr-btn" id="hdr-products-btn" onclick="sunnyOpenDrawer('products')" title="Mes produits" data-emoji="🧴"></button>
-            <button class="sunny-hdr-btn" id="hdr-options-btn" onclick="sunnyOpenDrawer('options')" title="Options" data-emoji="⚙️"></button>
+            <a href="<?php echo esc_url(home_url('/')); ?>" class="sunny-hdr-link" title="Accueil">
+                <span class="material-symbols-outlined">home</span>
+                Accueil
+            </a>
+            <a href="<?php echo esc_url(home_url('/mes-piscines/')); ?>" class="sunny-hdr-link" title="Mes piscines">
+                <span class="material-symbols-outlined">pool</span>
+                Mes piscines
+            </a>
+            <a href="<?php echo esc_url(home_url('/ajouter-ma-piscine/')); ?>" class="sunny-hdr-link" title="Ajouter piscine">
+                <span class="material-symbols-outlined">add_home</span>
+                Ajouter
+            </a>
         </div>
-    </div>
+    </header>
 
-    <!-- Messages -->
-    <div class="sunny-chat-messages" id="sunny-messages">
-        <div class="chat-bubble system">Bonjour ! Je suis Sunny 🌞 Posez-moi vos questions, envoyez une 📸 photo de bandelette — j'extrais automatiquement les valeurs et pré-remplis votre analyse.</div>
-        <?php if (!$has_pool): ?>
-        <div class="chat-bubble system">⚠️ Vous n'avez pas encore enregistré de piscine. <a href="<?php echo home_url('/ajouter-ma-piscine'); ?>" style="color:var(--gold-light,#ffd700);">Ajoutez-la ici</a> pour des conseils personnalisés.</div>
-        <?php endif; ?>
-    </div>
+    <!-- Sidebar (Desktop) -->
+    <aside class="sunny-sidebar" id="sunny-sidebar">
+        <button class="sunny-sidebar-toggle" id="sunny-sidebar-toggle" onclick="sunnyToggleSidebar()" title="Agrandir le menu">
+            <span class="material-symbols-outlined">chevron_right</span>
+        </button>
+        <button class="sunny-sidebar-btn" onclick="sunnyOpenDrawer('analyse')">
+            <span class="material-symbols-outlined">add_circle</span>
+            <span class="sidebar-label">Nouvelle analyse</span>
+        </button>
+        <div class="sunny-sidebar-divider"></div>
+        <div class="sunny-sidebar-section-label">Navigation</div>
+        <nav class="sunny-sidebar-nav">
+            <a href="<?php echo esc_url(home_url('/')); ?>" class="sunny-sidebar-link" data-tooltip="Accueil">
+                <span class="material-symbols-outlined">home</span>
+                <span class="sidebar-label">Accueil</span>
+            </a>
+            <a href="<?php echo esc_url(home_url('/mes-piscines/')); ?>" class="sunny-sidebar-link" data-tooltip="Mes piscines">
+                <span class="material-symbols-outlined">pool</span>
+                <span class="sidebar-label">Mes piscines</span>
+            </a>
+            <a href="<?php echo esc_url(home_url('/ajouter-ma-piscine/')); ?>" class="sunny-sidebar-link" data-tooltip="Ajouter piscine">
+                <span class="material-symbols-outlined">add_home</span>
+                <span class="sidebar-label">Ajouter piscine</span>
+            </a>
+        </nav>
+        <div class="sunny-sidebar-divider"></div>
+        <div class="sunny-sidebar-section-label">Outils</div>
+        <nav class="sunny-sidebar-nav" style="flex:0; margin-top:0;">
+            <button class="sunny-sidebar-link" id="sidebar-analyse" data-tooltip="Analyse d'eau" onclick="sunnyOpenDrawer('analyse')">
+                <span class="material-symbols-outlined">analytics</span>
+                <span class="sidebar-label">Analyse d'eau</span>
+            </button>
+            <button class="sunny-sidebar-link" id="sidebar-products" data-tooltip="Mes produits" onclick="sunnyOpenDrawer('products')">
+                <span class="material-symbols-outlined">water_drop</span>
+                <span class="sidebar-label">Mes produits</span>
+            </button>
+            <button class="sunny-sidebar-link" id="sidebar-options" data-tooltip="Options" onclick="sunnyOpenDrawer('options')">
+                <span class="material-symbols-outlined">settings</span>
+                <span class="sidebar-label">Options</span>
+            </button>
+            <button class="sunny-sidebar-link" id="sidebar-threads" data-tooltip="Discussions" onclick="sunnyOpenDrawer('threads')">
+                <span class="material-symbols-outlined">forum</span>
+                <span class="sidebar-label">Discussions</span>
+            </button>
+        </nav>
+        <div class="sunny-sidebar-footer">
+            <button class="sunny-sidebar-link" data-tooltip="Support" onclick="sunnyToast('Support à venir', 'info')">
+                <span class="material-symbols-outlined">help</span>
+                <span class="sidebar-label">Support</span>
+            </button>
+            <a href="<?php echo esc_url(wp_logout_url(home_url('/'))); ?>" class="sunny-sidebar-logout" data-tooltip="Déconnexion">
+                <span class="material-symbols-outlined">logout</span>
+                <span class="sidebar-label">Déconnexion</span>
+            </a>
+        </div>
+    </aside>
 
-    <!-- Input Area -->
-    <div class="sunny-chat-input-area">
-        <!-- Quick suggestions -->
-        <div class="sunny-suggestions" id="sunny-suggestions">
-            <button class="sunny-suggestion-pill" onclick="sunnyQuickSend('Mon eau est verte, que faire ?')">🟢 Eau verte</button>
-            <button class="sunny-suggestion-pill" onclick="sunnyQuickSend('Mon pH est trop élevé, comment le corriger ?')">⚗️ pH élevé</button>
-            <button class="sunny-suggestion-pill" onclick="sunnyQuickSend('Donne-moi mon planning d\'entretien de la semaine')">📅 Planning semaine</button>
-            <button class="sunny-suggestion-pill" onclick="sunnyQuickSend('Mon chlore est insuffisant, que faire ?')">💊 Chlore faible</button>
-            <button class="sunny-suggestion-pill" onclick="sunnyQuickSend('Comment hiverniser ma piscine ?')">❄️ Hivernage</button>
+    <!-- Main Chat Area -->
+    <main class="sunny-chat-main" style="flex:1; display:flex; flex-direction:column; overflow:hidden; margin-left:0;">
+        <!-- Messages -->
+        <div class="sunny-chat-messages" id="sunny-messages">
+            <div class="chat-bubble system">🌞 Sunny est prêt à vous aider avec votre piscine</div>
+            <div class="chat-bubble system">Envoyez une photo de bandelette pour une analyse automatique</div>
+            <?php if (!$has_pool): ?>
+            <div class="chat-bubble system">⚠️ <a href="<?php echo home_url('/ajouter-ma-piscine'); ?>" style="color:#eab308; text-decoration:underline;">Ajoutez votre piscine</a> pour des conseils personnalisés</div>
+            <?php endif; ?>
         </div>
 
-        <!-- Image preview compact -->
-        <div class="sunny-image-preview" id="sunny-image-preview-bar">
-            <img id="img-preview-thumb" src="" alt="Aperçu">
-            <div class="img-meta">
-                <div class="sunny-image-meta-label" id="img-preview-label">Photo jointe</div>
-                <div class="sunny-image-meta-sub" id="img-preview-sub">Tapez un message et envoyez</div>
+            <!-- FAB scroll to bottom -->
+            <button class="sunny-scroll-fab" id="sunny-scroll-fab" onclick="sunnyScrollToBottom()" aria-label="Aller en bas" title="Aller en bas">
+                <span class="material-symbols-outlined">keyboard_double_arrow_down</span>
+            </button>
+
+        <!-- Input Area -->
+        <div class="sunny-chat-input-area">
+            <!-- Quick suggestions -->
+            <div class="sunny-suggestions" id="sunny-suggestions">
+                <button class="sunny-suggestion-pill" onclick="sunnyQuickSend('Mon eau est verte, que faire ?')">Eau verte</button>
+                <button class="sunny-suggestion-pill" onclick="sunnyQuickSend('Mon pH est trop élevé')">pH élevé</button>
+                <button class="sunny-suggestion-pill" onclick="sunnyQuickSend('Planning entretien')">Planning</button>
+                <button class="sunny-suggestion-pill" onclick="sunnyQuickSend('Chlore insuffisant')">Chlore faible</button>
+                <button class="sunny-suggestion-pill" onclick="sunnyQuickSend('Hivernage')">Hivernage</button>
             </div>
-            <button class="sunny-image-remove" onclick="sunnyRemoveImage()" title="Retirer">✕</button>
+
+            <!-- Image preview compact -->
+            <div class="sunny-image-preview" id="sunny-image-preview-bar">
+                <img id="img-preview-thumb" src="" alt="Aperçu">
+                <div class="img-meta">
+                    <div class="sunny-image-meta-label" id="img-preview-label">Photo jointe</div>
+                    <div class="sunny-image-meta-sub" id="img-preview-sub">Tapez un message et envoyez</div>
+                </div>
+                <button class="sunny-image-remove" onclick="sunnyRemoveImage()" title="Retirer">✕</button>
+            </div>
+
+            <!-- Hidden file input -->
+            <input type="file" id="sunny-image-file" class="sunny-file-input" accept="image/*" capture="environment" onchange="sunnyLoadImage(this)">
+
+            <!-- Unified input row -->
+            <div class="sunny-input-unified">
+                <!-- Attachment button -->
+                <button class="sunny-attach-btn" id="sunny-attach-btn" onclick="document.getElementById('sunny-image-file').click();" title="Ajouter une photo">
+                    <span class="material-symbols-outlined">attach_file</span>
+                </button>
+
+                <textarea id="sunny-input"
+                    placeholder="Demandez à Sunny..."
+                    rows="1"
+                    onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sunnySend();}"
+                    oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'"></textarea>
+
+                <button class="sunny-send-btn" id="sunny-send" onclick="sunnySend()" title="Envoyer">
+                    <span class="material-symbols-outlined">send</span>
+                </button>
+            </div>
         </div>
+    </main>
 
-        <!-- Hidden file input -->
-        <input type="file" id="sunny-image-file" class="sunny-file-input" accept="image/*" capture="environment" onchange="sunnyLoadImage(this)">
-
-        <!-- Unified input row -->
-        <div class="sunny-input-unified">
-            <!-- Attachment button -->
-            <button class="sunny-attach-btn" id="sunny-attach-btn" onclick="document.getElementById('sunny-image-file').click();" title="Ajouter une photo" data-emoji="📎"></button>
-
-            <textarea id="sunny-input"
-                placeholder="Posez votre question à Sunny…"
-                rows="1"
-                onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sunnySend();}"
-                oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'"></textarea>
-
-            <button class="sunny-send-btn" id="sunny-send" onclick="sunnySend()" title="Envoyer">➤</button>
-        </div>
-    </div>
+    <!-- Mobile Bottom Navigation -->
+    <nav class="sunny-mobile-nav">
+        <a href="<?php echo esc_url(home_url('/')); ?>" class="sunny-mobile-nav-btn">
+            <span class="material-symbols-outlined">home</span>
+            Accueil
+        </a>
+        <a href="<?php echo esc_url(home_url('/mes-piscines/')); ?>" class="sunny-mobile-nav-btn">
+            <span class="material-symbols-outlined">pool</span>
+            Piscines
+        </a>
+        <button class="sunny-mobile-nav-btn" onclick="sunnyOpenDrawer('threads')">
+            <span class="material-symbols-outlined">forum</span>
+            Chat
+        </button>
+        <a href="<?php echo esc_url(wp_logout_url(home_url('/'))); ?>" class="sunny-mobile-nav-btn" style="color:var(--text-faint);">
+            <span class="material-symbols-outlined">logout</span>
+            Sortir
+        </a>
+    </nav>
 
     <!-- ── DRAWER OVERLAY ── -->
     <div class="sunny-drawer-overlay" id="sunny-drawer-overlay" onclick="sunnyCloseDrawer()"></div>
@@ -2193,11 +2072,16 @@ function sunny_chat_shortcode() {
             <button class="sunny-drawer-close" onclick="sunnyCloseDrawer()">✕</button>
         </div>
         <div class="sunny-drawer-body">
-            <div class="sunny-threads-header-bar">
+            <div class="sunny-threads-header-bar" style="display:flex; gap:8px; flex-wrap:wrap;">
                 <button class="sunny-new-thread-btn" id="sunny-new-thread-btn" onclick="sunnyCreateThread()">
                     ➕ Nouvelle discussion
                 </button>
+                <button class="sunny-new-thread-btn" id="sunny-new-folder-btn" onclick="sunnyCreateFolder()" style="background: var(--surface-2); border:1px solid var(--glass-border);">
+                    📁 Nouveau dossier
+                </button>
             </div>
+            <div id="sunny-folders-list" class="sunny-folders-section"></div>
+            <div class="sunny-folders-header"><span>Discussions</span></div>
             <div id="sunny-threads-list" class="sunny-threads-list">
                 <div class="sunny-threads-empty">
                     <div class="sunny-threads-empty-icon">💬</div>
@@ -2221,6 +2105,9 @@ function sunny_chat_shortcode() {
             const HISTORY_URL  = '<?php echo esc_url(rest_url('sunny-pool/v1/chat/history')); ?>';
             const PRODUCTS_URL = '<?php echo esc_url(rest_url('sunny-pool/v1/pool')); ?>';
             const THREADS_URL  = '<?php echo esc_url(rest_url('sunny-pool/v1/chat/threads')); ?>';
+            const FOLDERS_URL  = '<?php echo esc_url(rest_url('sunny-pool/v1/folders')); ?>';
+            const FOLDER_URL   = '<?php echo esc_url(rest_url('sunny-pool/v1/folder')); ?>';
+            const FOLDER_THREADS_URL = '<?php echo esc_url(rest_url('sunny-pool/v1/threads/folder')); ?>';
             const ANALYSE_URL  = '<?php echo esc_url(rest_url('sunny-pool/v1/analyse')); ?>';
             const ANALYSE_HISTORY_URL = '<?php echo esc_url(rest_url('sunny-pool/v1/analyse/history')); ?>';
 
@@ -2232,6 +2119,22 @@ function sunny_chat_shortcode() {
             let currentDrawer    = null;
 
             const msgsContainer = document.getElementById('sunny-messages');
+
+            // ── SIDEBAR TOGGLE (ChatGPT-style) ──────────────────────
+            window.sunnyToggleSidebar = function() {
+                const sidebar = document.getElementById('sunny-sidebar');
+                if (!sidebar) return;
+                sidebar.classList.toggle('expanded');
+                // Save preference
+                try { localStorage.setItem('sunny-sidebar-expanded', sidebar.classList.contains('expanded')); } catch(e) {}
+            };
+            // Restore sidebar state
+            try {
+                if (localStorage.getItem('sunny-sidebar-expanded') === 'true') {
+                    const sidebar = document.getElementById('sunny-sidebar');
+                    if (sidebar) sidebar.classList.add('expanded');
+                }
+            } catch(e) {}
 
             // --- Disable Select2 ---
             function killSelect2() {
@@ -2299,7 +2202,7 @@ function sunny_chat_shortcode() {
                                     appendBubble(msg.message, 'user');
                                 }
                                 if (msg.response) {
-                                    appendBubble(formatResponse(msg.response), 'sunny', true);
+                                    appendBubble(msg.response, 'sunny');
                                 }
                             });
                         } else {
@@ -2330,6 +2233,7 @@ function sunny_chat_shortcode() {
                 if (!list) return;
                 list.innerHTML = '<div class="sunny-threads-empty"><div class="sunny-threads-empty-icon">⏳</div><div class="sunny-threads-empty-text">Chargement...</div></div>';
 
+                loadFolders();
                 $.ajax({
                     url: `${THREADS_URL}?pool_id=${currentPoolId}`,
                     headers: { 'X-WP-Nonce': NONCE },
@@ -2341,7 +2245,7 @@ function sunny_chat_shortcode() {
                             }
                         } else {
                             list.innerHTML = '<div class="sunny-threads-empty"><div class="sunny-threads-empty-icon">💬</div><div class="sunny-threads-empty-text">Aucune discussion.<br>Créez-en une pour commencer !</div></div>';
-                            if (andSelectFirst) sunnyCreateThread();
+                            if (andSelectFirst && !currentThreadId) sunnyCreateThread();
                         }
                     },
                     error: function() {
@@ -2368,6 +2272,7 @@ function sunny_chat_shortcode() {
                         + (t.message_count > 0 ? '<span class="sunny-thread-badge">' + t.message_count + ' msg</span>' : '')
                         + '</div></div>'
                         + '<div class="sunny-thread-actions" onclick="event.stopPropagation()">'
+                        + '<button class="sunny-thread-action-btn" onclick="sunnyMoveThreadPrompt(' + t.id + ')" title="Déplacer dans un dossier" data-emoji="📁"></button>'
                         + '<button class="sunny-thread-action-btn" onclick="sunnyRenameThread(' + t.id + ', \'' + safeTitle + '\')" title="Renommer" data-emoji="✏️"></button>'
                         + '<button class="sunny-thread-action-btn delete" onclick="sunnyDeleteThread(' + t.id + ')" title="Supprimer" data-emoji="🗑️"></button>'
                         + '</div></div>';
@@ -2445,6 +2350,212 @@ function sunny_chat_shortcode() {
                             loadThreads(true);
                             appendBubble('🗑️ Discussion supprimée', 'system');
                         } else { alert(data.message || 'Erreur'); }
+                    },
+                    error: function() { alert('Erreur de connexion'); }
+                });
+            };
+
+            // ── FOLDERS MANAGEMENT ────────────────────────────────────
+            let foldersCache = [];
+            let openFolderIds = new Set();
+
+            function loadFolders() {
+                const wrap = document.getElementById('sunny-folders-list');
+                if (!wrap) return;
+                $.ajax({
+                    url: `${FOLDERS_URL}?pool_id=${currentPoolId}`,
+                    headers: { 'X-WP-Nonce': NONCE },
+                    success: function(data) {
+                        foldersCache = (data && data.success && data.data) ? data.data : [];
+                        renderFoldersList(foldersCache);
+                    },
+                    error: function() { wrap.innerHTML = ''; }
+                });
+            }
+
+            function renderFoldersList(folders) {
+                const wrap = document.getElementById('sunny-folders-list');
+                if (!wrap) return;
+                if (!folders.length) { wrap.innerHTML = ''; return; }
+                let html = '';
+                folders.forEach(function(f) {
+                    const isOpen = openFolderIds.has(f.id);
+                    const safeName = (f.name || 'Dossier').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    html += '<div class="sunny-folder-item' + (isOpen ? ' open' : '') + '" data-folder-id="' + f.id + '">'
+                        + '<div class="sunny-folder-head" onclick="sunnyToggleFolder(' + f.id + ')">'
+                        +   '<span class="sunny-folder-caret">▶</span>'
+                        +   '<span class="sunny-folder-icon">📁</span>'
+                        +   '<span class="sunny-folder-name">' + (f.name || 'Dossier') + '</span>'
+                        +   '<span class="sunny-folder-count">' + (f.thread_count || 0) + '</span>'
+                        +   '<div class="sunny-folder-actions" onclick="event.stopPropagation()">'
+                        +     '<button class="sunny-thread-action-btn" onclick="sunnyRenameFolder(' + f.id + ', \'' + safeName + '\')" title="Renommer" data-emoji="✏️"></button>'
+                        +     '<button class="sunny-thread-action-btn delete" onclick="sunnyDeleteFolder(' + f.id + ')" title="Supprimer" data-emoji="🗑️"></button>'
+                        +   '</div>'
+                        + '</div>'
+                        + '<div class="sunny-folder-body" id="folder-body-' + f.id + '">'
+                        +   (isOpen ? '<div class="sunny-folder-empty">Chargement...</div>' : '')
+                        + '</div>'
+                        + '</div>';
+                });
+                wrap.innerHTML = html;
+                openFolderIds.forEach(function(id) { loadFolderThreads(id); });
+            }
+
+            window.sunnyToggleFolder = function(folderId) {
+                const item = document.querySelector('.sunny-folder-item[data-folder-id="' + folderId + '"]');
+                if (!item) return;
+                if (openFolderIds.has(folderId)) {
+                    openFolderIds.delete(folderId);
+                    item.classList.remove('open');
+                } else {
+                    openFolderIds.add(folderId);
+                    item.classList.add('open');
+                    loadFolderThreads(folderId);
+                }
+            };
+
+            function loadFolderThreads(folderId) {
+                const body = document.getElementById('folder-body-' + folderId);
+                if (!body) return;
+                body.innerHTML = '<div class="sunny-folder-empty">Chargement...</div>';
+                $.ajax({
+                    url: `${FOLDER_THREADS_URL}?folder_id=${folderId}`,
+                    headers: { 'X-WP-Nonce': NONCE },
+                    success: function(data) {
+                        const threads = (data && data.success && data.data) ? data.data : [];
+                        renderFolderThreads(folderId, threads);
+                    },
+                    error: function() { renderFolderThreads(folderId, []); }
+                });
+            }
+
+            function renderFolderThreads(folderId, threads) {
+                const body = document.getElementById('folder-body-' + folderId);
+                if (!body) return;
+                let html = '';
+                if (!threads.length) {
+                    html += '<div class="sunny-folder-empty">Aucune discussion dans ce dossier.</div>';
+                } else {
+                    threads.forEach(function(t) {
+                        const isActive = (currentThreadId === parseInt(t.id));
+                        const safeTitle = (t.title || 'Nouvelle discussion').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                        html += '<div class="sunny-thread-item' + (isActive ? ' active' : '') + '" data-thread-id="' + t.id + '" onclick="sunnySelectThread(' + t.id + ', \'' + safeTitle + '\')">'
+                            + '<span class="sunny-thread-icon">' + (isActive ? '🟡' : '🗨️') + '</span>'
+                            + '<div class="sunny-thread-info"><div class="sunny-thread-title">' + (t.title || 'Nouvelle discussion') + '</div></div>'
+                            + '<div class="sunny-thread-actions" onclick="event.stopPropagation()">'
+                            +   '<button class="sunny-thread-action-btn" onclick="sunnyMoveThreadToFolder(' + t.id + ', 0)" title="Retirer du dossier" data-emoji="↩️"></button>'
+                            +   '<button class="sunny-thread-action-btn delete" onclick="sunnyDeleteThread(' + t.id + ')" title="Supprimer" data-emoji="🗑️"></button>'
+                            + '</div></div>';
+                    });
+                }
+                html += '<button class="sunny-folder-new-thread" onclick="sunnyCreateThreadInFolder(' + folderId + ')">➕ Nouvelle discussion ici</button>';
+                body.innerHTML = html;
+            }
+
+            window.sunnyCreateFolder = function() {
+                const name = prompt('Nom du nouveau dossier :', 'Nouveau dossier');
+                if (!name || !name.trim()) return;
+                $.ajax({
+                    url: FOLDER_URL,
+                    method: 'POST',
+                    contentType: 'application/json',
+                    headers: { 'X-WP-Nonce': NONCE },
+                    data: JSON.stringify({ pool_id: currentPoolId, name: name.trim() }),
+                    success: function(data) {
+                        if (data && data.success) {
+                            loadFolders();
+                            appendBubble('📁 Dossier créé : ' + name.trim(), 'system');
+                        } else { alert((data && data.message) || 'Erreur'); }
+                    },
+                    error: function() { alert('Erreur de connexion'); }
+                });
+            };
+
+            window.sunnyRenameFolder = function(folderId, currentName) {
+                const newName = prompt('Renommer le dossier :', currentName || '');
+                if (!newName || !newName.trim() || newName === currentName) return;
+                $.ajax({
+                    url: FOLDER_URL + '/' + folderId + '/rename',
+                    method: 'PUT',
+                    contentType: 'application/json',
+                    headers: { 'X-WP-Nonce': NONCE },
+                    data: JSON.stringify({ name: newName.trim() }),
+                    success: function(data) {
+                        if (data && data.success) loadFolders();
+                        else alert((data && data.message) || 'Erreur');
+                    },
+                    error: function() { alert('Erreur de connexion'); }
+                });
+            };
+
+            window.sunnyDeleteFolder = function(folderId) {
+                if (!confirm('Supprimer ce dossier et toutes ses discussions ?')) return;
+                $.ajax({
+                    url: FOLDER_URL + '/' + folderId,
+                    method: 'DELETE',
+                    headers: { 'X-WP-Nonce': NONCE },
+                    success: function(data) {
+                        if (data && data.success) {
+                            openFolderIds.delete(folderId);
+                            loadThreads(false);
+                            appendBubble('🗑️ Dossier supprimé', 'system');
+                        } else { alert((data && data.message) || 'Erreur'); }
+                    },
+                    error: function() { alert('Erreur de connexion'); }
+                });
+            };
+
+            window.sunnyMoveThreadPrompt = function(threadId) {
+                if (!foldersCache.length) {
+                    if (confirm('Aucun dossier existant. Créer un nouveau dossier ?')) sunnyCreateFolder();
+                    return;
+                }
+                let msg = 'Déplacer dans quel dossier ?\n\n0. (Aucun dossier)\n';
+                foldersCache.forEach(function(f, i) { msg += (i + 1) + '. ' + f.name + '\n'; });
+                const choice = prompt(msg, '1');
+                if (choice === null) return;
+                const idx = parseInt(choice);
+                if (isNaN(idx) || idx < 0 || idx > foldersCache.length) return;
+                const folderId = (idx === 0) ? 0 : foldersCache[idx - 1].id;
+                sunnyMoveThreadToFolder(threadId, folderId);
+            };
+
+            window.sunnyMoveThreadToFolder = function(threadId, folderId) {
+                $.ajax({
+                    url: FOLDER_URL + '/' + (folderId || 0) + '/thread/' + threadId,
+                    method: 'PUT',
+                    headers: { 'X-WP-Nonce': NONCE },
+                    success: function(data) {
+                        if (data && data.success) loadThreads(false);
+                        else alert((data && data.message) || 'Erreur');
+                    },
+                    error: function() { alert('Erreur de connexion'); }
+                });
+            };
+
+            window.sunnyCreateThreadInFolder = function(folderId) {
+                $.ajax({
+                    url: THREADS_URL,
+                    method: 'POST',
+                    contentType: 'application/json',
+                    headers: { 'X-WP-Nonce': NONCE },
+                    data: JSON.stringify({ pool_id: currentPoolId }),
+                    success: function(data) {
+                        if (data && data.success && data.data) {
+                            const newId = data.data.id;
+                            $.ajax({
+                                url: FOLDER_URL + '/' + folderId + '/thread/' + newId,
+                                method: 'PUT',
+                                headers: { 'X-WP-Nonce': NONCE },
+                                complete: function() {
+                                    switchToThread(newId, data.data.title);
+                                    openFolderIds.add(folderId);
+                                    loadThreads();
+                                    sunnyCloseDrawer();
+                                    appendBubble('Nouvelle discussion créée dans le dossier 📁', 'system');
+                                }
+                            });
+                        } else { alert((data && data.message) || 'Erreur'); }
                     },
                     error: function() { alert('Erreur de connexion'); }
                 });
@@ -2745,7 +2856,7 @@ function sunny_chat_shortcode() {
                                     loadThreads();
                                 }
                                 removeTyping(typingEl);
-                                appendBubble(formatResponse(data.response), 'sunny', true);
+                                appendBubble(data.response, 'sunny');
                                 if (data.alertes && data.alertes.length) appendAlertes(data.alertes);
                                 if (data.score_eau !== null && data.score_eau !== undefined) appendScoreEau(data.score_eau);
                                 if (data.analyse_extraite) prefillAnalyse(data.analyse_extraite);
@@ -3172,7 +3283,7 @@ function sunny_chat_shortcode() {
                     success: function(data) {
                         if (data.found && data.response) {
                             removeTyping(typingEl);
-                            appendBubble(formatResponse(data.response), 'sunny', true);
+                            appendBubble(data.response, 'sunny');
                             if (data.alertes && data.alertes.length) appendAlertes(data.alertes);
                             if (data.score_eau !== null && data.score_eau !== undefined) appendScoreEau(data.score_eau);
                             if (data.analyse_extraite) prefillAnalyse(data.analyse_extraite);
@@ -3194,8 +3305,20 @@ function sunny_chat_shortcode() {
                 const msgs = document.getElementById('sunny-messages');
                 const div  = document.createElement('div');
                 div.className = 'chat-bubble ' + type;
-                if (isHTML) div.innerHTML = text;
-                else        div.textContent = text;
+
+                const structured = (type === 'sunny') ? normalizeSunnyPayload(text) : null;
+                if (structured) {
+                    renderSunnyPayload(div, structured);
+                } else if (isHTML) {
+                    div.innerHTML = text;
+                } else if (type === 'sunny' && typeof text === 'string') {
+                    div.innerHTML = formatResponse(text);
+                } else if (text === null || text === undefined) {
+                    div.textContent = '';
+                } else {
+                    div.textContent = String(text);
+                }
+
                 msgs.appendChild(div);
                 msgs.scrollTop = msgs.scrollHeight;
                 return div;
@@ -3230,10 +3353,206 @@ function sunny_chat_shortcode() {
             }
 
             function formatResponse(text) {
+                if (typeof text !== 'string') return '';
                 return text
                     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
                     .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
                     .replace(/\n/g,'<br>');
+            }
+
+            function normalizeSunnyPayload(value) {
+                let payload = value;
+                if (!payload) return null;
+
+                if (typeof payload === 'string') {
+                    const trimmed = payload.trim();
+                    if (!trimmed) return null;
+                    if ((trimmed[0] === '{' && trimmed[trimmed.length - 1] === '}') || (trimmed[0] === '[' && trimmed[trimmed.length - 1] === ']')) {
+                        try { payload = JSON.parse(trimmed); }
+                        catch (_) { return null; }
+                    } else {
+                        return null;
+                    }
+                }
+
+                if (typeof payload !== 'object' || Array.isArray(payload)) return null;
+                const hasKnownFields = payload.message || payload.diagnosis || payload.actions || payload.products || payload.links || payload.warnings || payload.questions;
+                return hasKnownFields ? payload : null;
+            }
+
+            function safeArray(input) {
+                return Array.isArray(input) ? input : [];
+            }
+
+            function safePriority(value) {
+                const v = String(value || '').toLowerCase();
+                return (v === 'high' || v === 'medium' || v === 'low') ? v : 'low';
+            }
+
+            function safeSeverityLabel(value) {
+                const map = { high: 'Élevée', medium: 'Moyenne', low: 'Faible' };
+                const key = safePriority(value);
+                return map[key] || 'Faible';
+            }
+
+            function safeUrl(url) {
+                if (typeof url !== 'string') return null;
+                const trimmed = url.trim();
+                if (!trimmed) return null;
+                if (/^https?:\/\//i.test(trimmed)) return trimmed;
+                return null;
+            }
+
+            function createSection(title) {
+                const section = document.createElement('section');
+                section.className = 'sunny-rich-section';
+                const h = document.createElement('h4');
+                h.className = 'sunny-rich-title';
+                h.textContent = title;
+                section.appendChild(h);
+                return section;
+            }
+
+            function createBadge(level, prefix) {
+                const badge = document.createElement('span');
+                badge.className = 'sunny-rich-badge ' + safePriority(level);
+                badge.textContent = (prefix ? (prefix + ': ') : '') + safeSeverityLabel(level);
+                return badge;
+            }
+
+            function renderSunnyPayload(container, payload) {
+                const root = document.createElement('div');
+                root.className = 'sunny-rich';
+
+                if (payload.message) {
+                    const p = document.createElement('p');
+                    p.className = 'sunny-rich-message';
+                    p.textContent = String(payload.message);
+                    root.appendChild(p);
+                }
+
+                if (payload.diagnosis && (payload.diagnosis.summary || payload.diagnosis.severity)) {
+                    const section = createSection('Diagnostic');
+                    const row = document.createElement('div');
+                    row.className = 'sunny-rich-diagnosis';
+                    const summary = document.createElement('p');
+                    summary.textContent = payload.diagnosis.summary ? String(payload.diagnosis.summary) : 'Diagnostic disponible';
+                    row.appendChild(summary);
+                    if (payload.diagnosis.severity) row.appendChild(createBadge(payload.diagnosis.severity, 'Niveau'));
+                    section.appendChild(row);
+                    root.appendChild(section);
+                }
+
+                const actions = safeArray(payload.actions);
+                if (actions.length) {
+                    const section = createSection('Actions recommandées');
+                    const list = document.createElement('ol');
+                    list.className = 'sunny-rich-list';
+                    actions.forEach(function(action) {
+                        if (!action) return;
+                        const li = document.createElement('li');
+                        const title = document.createElement('span');
+                        title.className = 'sunny-rich-item-title';
+                        title.textContent = String(action.title || 'Action');
+                        li.appendChild(title);
+                        if (action.priority) li.appendChild(createBadge(action.priority));
+                        if (action.description) {
+                            const desc = document.createElement('div');
+                            desc.className = 'sunny-rich-item-description';
+                            desc.textContent = String(action.description);
+                            li.appendChild(desc);
+                        }
+                        list.appendChild(li);
+                    });
+                    if (list.children.length) {
+                        section.appendChild(list);
+                        root.appendChild(section);
+                    }
+                }
+
+                const products = safeArray(payload.products);
+                if (products.length) {
+                    const section = createSection('Produits conseillés');
+                    const list = document.createElement('ul');
+                    list.className = 'sunny-rich-list';
+                    products.forEach(function(product) {
+                        if (!product) return;
+                        const li = document.createElement('li');
+                        const title = document.createElement('span');
+                        title.className = 'sunny-rich-item-title';
+                        title.textContent = String(product.name || 'Produit');
+                        li.appendChild(title);
+                        const parts = [];
+                        if (product.reason) parts.push(String(product.reason));
+                        if (product.dosage) parts.push('Dosage: ' + String(product.dosage));
+                        if (parts.length) {
+                            const desc = document.createElement('div');
+                            desc.className = 'sunny-rich-item-description';
+                            desc.textContent = parts.join(' • ');
+                            li.appendChild(desc);
+                        }
+                        list.appendChild(li);
+                    });
+                    if (list.children.length) {
+                        section.appendChild(list);
+                        root.appendChild(section);
+                    }
+                }
+
+                const links = safeArray(payload.links);
+                if (links.length) {
+                    const section = createSection('Liens utiles');
+                    const list = document.createElement('ul');
+                    list.className = 'sunny-rich-link-list';
+                    links.forEach(function(link) {
+                        if (!link) return;
+                        const href = safeUrl(link.url);
+                        if (!href) return;
+                        const li = document.createElement('li');
+                        const a = document.createElement('a');
+                        a.className = 'sunny-rich-link';
+                        a.href = href;
+                        a.target = '_blank';
+                        a.rel = 'noopener noreferrer';
+                        a.textContent = '🔗 ' + String(link.title || 'Ouvrir le lien');
+                        li.appendChild(a);
+                        list.appendChild(li);
+                    });
+                    if (list.children.length) {
+                        section.appendChild(list);
+                        root.appendChild(section);
+                    }
+                }
+
+                const warnings = safeArray(payload.warnings);
+                if (warnings.length) {
+                    const section = createSection('Avertissements');
+                    const list = document.createElement('ul');
+                    list.className = 'sunny-rich-list';
+                    warnings.forEach(function(item) {
+                        const li = document.createElement('li');
+                        li.textContent = String(item);
+                        list.appendChild(li);
+                    });
+                    section.appendChild(list);
+                    root.appendChild(section);
+                }
+
+                const questions = safeArray(payload.questions);
+                if (questions.length) {
+                    const section = createSection('Questions de suivi');
+                    const list = document.createElement('ul');
+                    list.className = 'sunny-rich-list';
+                    questions.forEach(function(item) {
+                        const li = document.createElement('li');
+                        li.textContent = String(item);
+                        list.appendChild(li);
+                    });
+                    section.appendChild(list);
+                    root.appendChild(section);
+                }
+
+                container.appendChild(root);
             }
 
             function prefillAnalyse(analyse) {
@@ -3356,6 +3675,71 @@ function sunny_chat_shortcode() {
                     }
                 }
             }, { passive: true });
+
+
+            // ── SCROLL FAB & ENHANCEMENTS ──────────────────────────
+            (function setupScrollFab() {
+                const msgs = document.getElementById('sunny-messages');
+                const fab  = document.getElementById('sunny-scroll-fab');
+                if (!msgs || !fab) return;
+                const SCROLL_THRESHOLD = 120;
+                function update() {
+                    const distFromBottom = msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight;
+                    fab.classList.toggle('visible', distFromBottom > SCROLL_THRESHOLD);
+                }
+                msgs.addEventListener('scroll', update, { passive: true });
+                // Watch DOM mutations to refresh visibility on new messages
+                const mo = new MutationObserver(update);
+                mo.observe(msgs, { childList: true, subtree: false });
+                window.sunnyScrollToBottom = function() {
+                    msgs.scrollTo({ top: msgs.scrollHeight, behavior: 'smooth' });
+                };
+                update();
+            })();
+
+            // ── HORIZONTAL SWIPE-TO-CLOSE FOR DRAWERS ──────────────
+            (function setupDrawerSwipe() {
+                document.querySelectorAll('.sunny-drawer').forEach(function(drawer) {
+                    let startX = 0, startY = 0, currentX = 0, dragging = false, axis = null;
+                    drawer.addEventListener('touchstart', function(e) {
+                        if (!drawer.classList.contains('open')) return;
+                        const t = e.touches[0];
+                        startX = t.clientX; startY = t.clientY; currentX = 0; dragging = true; axis = null;
+                        drawer.style.transition = 'none';
+                    }, { passive: true });
+                    drawer.addEventListener('touchmove', function(e) {
+                        if (!dragging) return;
+                        const t = e.touches[0];
+                        const dx = t.clientX - startX;
+                        const dy = t.clientY - startY;
+                        if (!axis) axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+                        const isMobile = window.matchMedia('(max-width: 720px)').matches;
+                        if (isMobile && axis === 'y' && dy > 0) {
+                            currentX = dy;
+                            drawer.style.transform = 'translateY(' + dy + 'px)';
+                        } else if (!isMobile && axis === 'x' && dx > 0) {
+                            currentX = dx;
+                            drawer.style.transform = 'translateX(' + dx + 'px)';
+                        }
+                    }, { passive: true });
+                    drawer.addEventListener('touchend', function() {
+                        if (!dragging) return;
+                        dragging = false;
+                        drawer.style.transition = '';
+                        drawer.style.transform = '';
+                        if (currentX > 100) sunnyCloseDrawer();
+                    }, { passive: true });
+                });
+            })();
+
+            // ── ESC TO CLOSE DRAWER ────────────────────────────────
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    if (typeof currentDrawer !== 'undefined' && currentDrawer) sunnyCloseDrawer();
+                }
+            });
+
+            document.body.classList.add('sunny-chat-active');
 
             // Initialize
             console.log('[Sunny Chat] UX/UI Enhanced v2.0 initialized');

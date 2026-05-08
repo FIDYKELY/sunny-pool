@@ -14,6 +14,9 @@ if (!defined('SUNNY_N8N_WEBHOOK_URL')) {
 if (!defined('SUNNY_N8N_ANALYSE_WEBHOOK_URL')) {
     define('SUNNY_N8N_ANALYSE_WEBHOOK_URL', 'https://n8n.trouvezpourmoi.com/webhook/sunny-water-analysis');
 }
+if (!defined('SUNNY_N8N_ANALYSEP_WEBHOOK_URL')) {
+    define('SUNNY_N8N_ANALYSEP_WEBHOOK_URL', 'https://n8n.trouvezpourmoi.com/webhook/analyse-photo');
+}
 // Clé secrète que n8n envoie dans le header X-N8N-Secret lors du callback
 if (!defined('SUNNY_N8N_CALLBACK_SECRET')) {
     define('SUNNY_N8N_CALLBACK_SECRET', 'a8F3kL9pQ2xZ7mN4rT6vW1yH5cJ8uB0s');
@@ -24,6 +27,19 @@ add_action('rest_api_init', 'sunny_pool_register_api_routes');
 
 function sunny_pool_register_api_routes() {
     error_log('[Sunny Pool] Enregistrement des routes API REST');
+
+    register_rest_route('sunny-pool/v1', '/user/password', [
+    'methods'             => 'PUT',
+    'callback'            => 'sunny_pool_change_password',
+    'permission_callback' => 'sunny_pool_api_check_auth',
+]);
+
+register_rest_route('sunny-pool/v1', '/me', [
+    'methods'             => 'GET',
+    'callback'            => 'sunny_pool_get_me',
+    'permission_callback' => 'sunny_pool_api_check_auth',
+]);
+
     // Récupérer toutes les piscines de l'utilisateur connecté
     register_rest_route('sunny-pool/v1', '/my-pools', [
         'methods' => 'GET',
@@ -166,6 +182,65 @@ function sunny_pool_register_api_routes() {
     ]);
 
     // ============================================================
+
+    // ============================================================
+    // PLANNING ENTRETIEN (sunny_planning)
+    // ============================================================
+
+    // Lister tous les plannings de l'utilisateur (option: filtrer par pool_id)
+    // GET /wp-json/sunny-pool/v1/planning?pool_id=123
+    register_rest_route('sunny-pool/v1', '/planning', [
+        'methods'             => 'GET',
+        'callback'            => 'sunny_pool_api_list_plannings',
+        'permission_callback' => 'sunny_pool_api_check_auth',
+        'args'                => [
+            'pool_id' => [
+                'validate_callback' => function($param) { return is_numeric($param); },
+                'required' => false,
+            ],
+        ],
+    ]);
+
+    // Récupérer un planning spécifique
+    // GET /wp-json/sunny-pool/v1/planning/{id}
+    register_rest_route('sunny-pool/v1', '/planning/(?P<id>\d+)', [
+        'methods'             => 'GET',
+        'callback'            => 'sunny_pool_api_get_planning',
+        'permission_callback' => 'sunny_pool_api_check_planning_permission',
+        'args'                => [
+            'id' => ['validate_callback' => function($p) { return is_numeric($p); }],
+        ],
+    ]);
+
+    // Créer un planning
+    // POST /wp-json/sunny-pool/v1/planning
+    register_rest_route('sunny-pool/v1', '/planning', [
+        'methods'             => 'POST',
+        'callback'            => 'sunny_pool_api_create_planning',
+        'permission_callback' => 'sunny_pool_api_check_auth',
+    ]);
+
+    // Mettre à jour un planning
+    // PUT /wp-json/sunny-pool/v1/planning/{id}
+    register_rest_route('sunny-pool/v1', '/planning/(?P<id>\d+)', [
+        'methods'             => 'PUT',
+        'callback'            => 'sunny_pool_api_update_planning',
+        'permission_callback' => 'sunny_pool_api_check_planning_permission',
+        'args'                => [
+            'id' => ['validate_callback' => function($p) { return is_numeric($p); }],
+        ],
+    ]);
+
+    // Supprimer un planning
+    // DELETE /wp-json/sunny-pool/v1/planning/{id}
+    register_rest_route('sunny-pool/v1', '/planning/(?P<id>\d+)', [
+        'methods'             => 'DELETE',
+        'callback'            => 'sunny_pool_api_delete_planning',
+        'permission_callback' => 'sunny_pool_api_check_planning_permission',
+        'args'                => [
+            'id' => ['validate_callback' => function($p) { return is_numeric($p); }],
+        ],
+    ]);
     // NOUVEAU : Endpoint chat Sunny — Bridge WordPress ↔ n8n
     // POST /wp-json/sunny-pool/v1/chat
     // ============================================================
@@ -202,6 +277,12 @@ function sunny_pool_register_api_routes() {
         'permission_callback' => 'sunny_pool_api_check_auth',
     ]);
 
+    register_rest_route('sunny-pool/v1', '/analyse/photo', [
+        'methods'             => 'POST',
+        'callback'            => 'sunny_pool_api_submit_photo_analyse',
+        'permission_callback' => 'sunny_pool_api_check_auth',
+    ]);
+
     register_rest_route('sunny-pool/v1', '/analyse/history', [
         'methods'             => 'GET',
         'callback'            => 'sunny_pool_api_get_water_analyses_history',
@@ -216,6 +297,24 @@ function sunny_pool_register_api_routes() {
                 'default' => 20,
             ],
         ],
+    ]);
+
+        // ============================================================
+    // Endpoint polling pour vérifier les réponses en attente
+    // GET /wp-json/sunny-pool/v1/analyse/poll?analyse_id=xxx
+    // ============================================================
+    register_rest_route('sunny-pool/v1', '/analyse/poll', [
+        'methods'             => 'GET',
+        'callback'            => 'sunny_pool_api_analyse_poll',
+        'permission_callback' => 'sunny_pool_api_check_auth',
+        'args'                => [
+            'analyse_id' => [
+                'validate_callback' => function($param, $request, $key) {
+                    return !empty($param);
+                },
+                'required' => true,
+            ]
+        ]
     ]);
 
     register_rest_route('sunny-pool/v1', '/analyse-callback', [
@@ -279,10 +378,21 @@ function sunny_pool_register_api_routes() {
     ]);
 
     // Renommer un thread
-    // PUT /wp-json/sunny-pool/v1/chat/threads/{id}
-    register_rest_route('sunny-pool/v1', '/chat/threads/(?P<thread_id>\d+)', [
+    // PUT /wp-json/sunny-pool/v1/chat/threads/{id}/rename
+    register_rest_route('sunny-pool/v1', '/chat/threads/(?P<thread_id>\d+)/rename', [
         'methods'             => 'PUT',
         'callback'            => 'sunny_pool_api_rename_thread',
+        'permission_callback' => 'sunny_pool_api_check_auth',
+        'args'                => [
+            'thread_id' => ['validate_callback' => function($p) { return is_numeric($p); }],
+        ]
+    ]);
+
+    // Mettre un thread en favorie ou pas
+    // PUT /wp-json/sunny-pool/v1/chat/threads/{id}/favorite
+    register_rest_route('sunny-pool/v1', '/chat/threads/(?P<thread_id>\d+)/favorite', [
+        'methods'             => 'PUT',
+        'callback'            => 'sunny_pool_api_favorite_thread',
         'permission_callback' => 'sunny_pool_api_check_auth',
         'args'                => [
             'thread_id' => ['validate_callback' => function($p) { return is_numeric($p); }],
@@ -310,9 +420,165 @@ function sunny_pool_register_api_routes() {
             'thread_id' => ['validate_callback' => function($p) { return is_numeric($p); }],
         ]
     ]);
+
+ // ============================================================
+    // DOSSIERS (THREADS) — Dossier de discussions
+    // ============================================================
+
+    // Liste des dossiers threads
+    // GET /wp-json/sunny-pool/v1/folders?pool_id=123
+    register_rest_route('sunny-pool/v1', '/folders', [
+        'methods'             => 'GET',
+        'callback'            => 'sunny_pool_api_list_folder',
+        'permission_callback' => 'sunny_pool_api_check_auth',
+        'args'                => [
+            'pool_id' => [
+                'validate_callback' => function($param) { return is_numeric($param); },
+                'required' => true,
+            ]
+        ]
+    ]);
+
+    // Créer un nouveau dossier
+    // POST /wp-json/sunny-pool/v1/folder
+    register_rest_route('sunny-pool/v1', '/folder', [
+        'methods'             => 'POST',
+        'callback'            => 'sunny_pool_api_create_folder',
+        'permission_callback' => 'sunny_pool_api_check_auth',
+    ]);
+
+    // Renommer un dossier thread
+    // PUT /wp-json/sunny-pool/v1/folder/{id}/rename
+    register_rest_route('sunny-pool/v1', '/folder/(?P<folder_id>\d+)/rename', [
+        'methods'             => 'PUT',
+        'callback'            => 'sunny_pool_api_rename_folder',
+        'permission_callback' => 'sunny_pool_api_check_auth',
+        'args'                => [
+            'folder_id' => ['validate_callback' => function($p) { return is_numeric($p); }],
+        ]
+    ]);
+
+   /*  // Mettre un thread en favorie ou pas
+    // PUT /wp-json/sunny-pool/v1/chat/threads/{id}/favorite
+    register_rest_route('sunny-pool/v1', '/chat/threads/(?P<thread_id>\d+)/favorite', [
+        'methods'             => 'PUT',
+        'callback'            => 'sunny_pool_api_favorite_thread',
+        'permission_callback' => 'sunny_pool_api_check_auth',
+        'args'                => [
+            'thread_id' => ['validate_callback' => function($p) { return is_numeric($p); }],
+        ]
+    ]); */
+
+    // Supprimer un dossier thread (et ses threads et les messages)
+    // DELETE /wp-json/sunny-pool/v1/folder/{id}
+    register_rest_route('sunny-pool/v1', '/folder/(?P<folder_id>\d+)', [
+        'methods'             => 'DELETE',
+        'callback'            => 'sunny_pool_api_delete_folder',
+        'permission_callback' => 'sunny_pool_api_check_auth',
+        'args'                => [
+            'folder_id' => ['validate_callback' => function($p) { return is_numeric($p); }],
+        ]
+    ]);
+
+    // Ajouter un thread dans un dossier
+    // PUT /wp-json/sunny-pool/v1/folder/{id}/thread
+    register_rest_route('sunny-pool/v1', '/folder/(?P<folder_id>\d+)/thread/(?P<thread_id>\d+)', [
+    'methods'             => 'PUT',
+    'callback'            => 'sunny_pool_api_thread_to_folder',
+    'permission_callback' => 'sunny_pool_api_check_auth',
+    'args'                => [
+        'folder_id' => [
+            'required' => true,
+            'validate_callback' => function($p) {
+                return is_numeric($p);
+            }
+        ],
+        'thread_id' => [
+            'required' => true,
+            'validate_callback' => function($p) {
+                return is_numeric($p);
+            }
+        ],
+    ]
+]);
+
+    // Lister les discussions d'un dossier
+    // GET /wp-json/sunny-pool/v1/threads/folder/{folder_id}
+    register_rest_route('sunny-pool/v1', '/threads/folder', [
+        'methods'             => 'GET',
+        'callback'            => 'sunny_pool_api_get_thread_folder',
+        'permission_callback' => 'sunny_pool_api_check_auth',
+        'args'                => [
+            'folder_id' => ['validate_callback' => function($p) { return is_numeric($p); }],
+        ]
+    ]);
 }
 
 // ========== FONCTIONS DE VÉRIFICATION DES PERMISSIONS ==========
+
+function sunny_pool_get_me(WP_REST_Request $request) {
+
+    $user_id = get_current_user_id();
+
+    if (!$user_id) {
+        return new WP_Error(
+            'not_logged_in',
+            'Utilisateur non connecté',
+            ['status' => 401]
+        );
+    }
+
+    $user = get_user_by('ID', $user_id);
+
+    return rest_ensure_response([
+        'id' => $user->ID,
+        'email' => $user->user_email,
+        'display_name' => $user->display_name,
+        'roles' => $user->roles,
+        'avatar' => get_avatar_url($user->ID),
+        'meta' => get_user_meta($user->ID),
+    ]);
+}
+
+
+function sunny_pool_change_password(WP_REST_Request $request) {
+    $user_id  = get_current_user_id();
+    $new_password = $request->get_param('new_password');
+    $current_password = $request->get_param('current_password');
+    
+    if (!$user_id || !$new_password) {
+        return new WP_Error(
+            'missing_fields',
+            'user_id et new_password sont obligatoires',
+            ['status' => 400]
+        );
+    }
+
+    $user = get_user_by('ID', $user_id);
+
+    if (!$user) {
+        return new WP_Error(
+            'user_not_found',
+            'Utilisateur introuvable',
+            ['status' => 404]
+        );
+    }
+
+    if (!wp_check_password($current_password, $user->user_pass, $user_id)) {
+    return new WP_Error(
+        'invalid_password',
+        'Ancien mot de passe incorrect',
+        ['status' => 403]
+    );
+}
+
+    wp_set_password($new_password, $user_id);
+
+    return rest_ensure_response([
+        'success' => true,
+        'message' => 'Mot de passe modifié avec succès'
+    ]);
+}
 
 /**
  * Vérifie si l'utilisateur est connecté (session PHP ou JWT Bearer)
@@ -423,6 +689,35 @@ function sunny_pool_api_check_pool_permission($request) {
     return ($user_id == $owner_id) || current_user_can('administrator');
 }
 
+
+/**
+ * Vérifie si l'utilisateur a accès à un planning spécifique
+ */
+function sunny_pool_api_check_planning_permission($request) {
+    if (!sunny_pool_api_check_auth()) {
+        return false;
+    }
+
+    global $wpdb;
+    $planning_id = intval($request->get_param('id'));
+    $user_id     = get_current_user_id();
+
+    if (!$planning_id) {
+        return false;
+    }
+
+    $table_planning = $wpdb->prefix . 'sunny_planning';
+    $planning = $wpdb->get_row($wpdb->prepare(
+        "SELECT id, user_id FROM $table_planning WHERE id = %d",
+        $planning_id
+    ));
+
+    if (!$planning) {
+        return new WP_Error('rest_not_found', 'Planning non trouvé', ['status' => 404]);
+    }
+
+    return ((int) $planning->user_id === (int) $user_id) || current_user_can('administrator');
+}
 // ========== FONCTIONS DE RÉCUPÉRATION DES DONNÉES ==========
 
 /**
@@ -871,16 +1166,11 @@ function sunny_pool_api_chat($request) {
         ], 400);
     }
 
-    // ── Nettoyer l'image : retirer le préfixe data:image/...;base64, ──
-    // n8n (et OpenAI Vision) attendent la chaîne base64 PURE
-    $image_base64 = '';
-    if (!empty($image_base64_raw)) {
-        if (preg_match('/^data:image\/[^;]+;base64,(.+)$/s', $image_base64_raw, $m)) {
-            $image_base64 = $m[1];
-        } else {
-            $image_base64 = $image_base64_raw; // déjà pur
-        }
-    }
+    // ── Normaliser l'image pour n8n : data:image/{mime};base64,... ──
+    $chat_image_meta         = sunny_pool_get_base64_image_meta($image_base64_raw);
+    $image_base64_clean      = $chat_image_meta['clean'];
+    $image_base64_with_prefix= sunny_pool_format_base64_image_data_uri($image_base64_raw);
+    $image_mime_type         = !empty($chat_image_meta['clean']) ? ($chat_image_meta['mime'] ?: 'image/jpeg') : '';
 
     // ── Récupérer la piscine ─────────────────────────────────────
     $pool_id_param = isset($params['pool_id']) ? intval($params['pool_id']) : 0;
@@ -1080,7 +1370,8 @@ function sunny_pool_api_chat($request) {
         'callback_url'     => $callback_url,
         'source'           => $source,
         'message'          => $message,
-        'image_base64'     => $image_base64,     // base64 pur (vide si pas d'image)
+        'image_base64'     => $image_base64_with_prefix, // data:image/{mime};base64,...
+        'image_mime_type'  => $image_mime_type,
         'image_type'       => $image_type,       // 'water' | 'product' | 'pool' | 'general'
         'latitude'         => $lat,              // 0 si pas de météo
         'longitude'        => $lon,              // 0 si pas de météo
@@ -1095,14 +1386,14 @@ function sunny_pool_api_chat($request) {
         'wp_user_id'       => $user_id,
     ];
 
-    error_log('[Sunny Chat] → n8n | conv: ' . $final_conversation_id . ' | img: ' . (empty($image_base64) ? 'non' : round(strlen($image_base64)/1024) . 'Ko'));
+    error_log('[Sunny Chat] → n8n | conv: ' . $final_conversation_id . ' | img: ' . (empty($image_base64_clean) ? 'non' : round(strlen($image_base64_clean)/1024) . 'Ko'));
 
     // ── Sauvegarder le message en statut 'pending' ───────────────
     // (la réponse sera mise à jour par le callback)
     sunny_pool_save_chat_message(
         $user_id, $selected_pool_id,
         $message, '',                     // réponse vide pour l'instant
-        !empty($image_base64),
+        !empty($image_base64_clean),
         $session_id, $final_conversation_id, 'pending',
         null, null, null, $thread_id
     );
@@ -1457,10 +1748,16 @@ function sunny_pool_api_submit_water_analyse($request) {
     }
 
     $analyse_data = isset($params['analyse']) && is_array($params['analyse']) ? $params['analyse'] : [];
+    $photo_base64_raw = $params['photo_bandelette_base64'] ?? '';
     $fields = ['ph', 'chlore', 'tac', 'stabilisant', 'temperature'];
     $normalized = [];
     $has_value = false;
-    foreach ($fields as $field) {
+    $photo_url = '';
+
+    if(
+        count($analyse_data) != 0 
+    ){
+        foreach ($fields as $field) {
         if (isset($analyse_data[$field]) && $analyse_data[$field] !== '') {
             $normalized[$field] = floatval($analyse_data[$field]);
             $has_value = true;
@@ -1468,21 +1765,25 @@ function sunny_pool_api_submit_water_analyse($request) {
             $normalized[$field] = null;
         }
     }
+    }else{
+        if (!empty($photo_base64_raw)) {
+             $has_value = true;
+        $attachment_id = sunny_pool_upload_base64_image($photo_base64_raw, $pool_id);
+        if (!is_wp_error($attachment_id)) {
+            $photo_url = wp_get_attachment_url($attachment_id);
+        }
+    }
+    }
+    
 
     if (!$has_value) {
         return new WP_REST_Response(['success' => false, 'message' => 'Au moins une mesure est requise'], 400);
     }
 
     $analyse_id = 'ana-' . $user_id . '-' . $pool_id . '-' . time() . '-' . wp_rand(100, 999);
-    $photo_url = '';
-    $photo_base64_raw = $params['photo_bandelette_base64'] ?? '';
+    
 
-    if (!empty($photo_base64_raw)) {
-        $attachment_id = sunny_pool_upload_base64_image($photo_base64_raw, $pool_id);
-        if (!is_wp_error($attachment_id)) {
-            $photo_url = wp_get_attachment_url($attachment_id);
-        }
-    }
+    
 
     $table_name = $wpdb->prefix . 'sunny_water_analyses';
     $inserted = $wpdb->insert($table_name, [
@@ -1503,14 +1804,10 @@ function sunny_pool_api_submit_water_analyse($request) {
         return new WP_REST_Response(['success' => false, 'message' => 'Impossible d\'enregistrer l\'analyse'], 500);
     }
 
-    $photo_base64_clean = '';
-    if (!empty($photo_base64_raw)) {
-        if (preg_match('/^data:image\/[^;]+;base64,(.+)$/s', $photo_base64_raw, $matches)) {
-            $photo_base64_clean = $matches[1];
-        } else {
-            $photo_base64_clean = $photo_base64_raw;
-        }
-    }
+    $water_image_meta          = sunny_pool_get_base64_image_meta($photo_base64_raw);
+    $photo_base64_clean        = $water_image_meta['clean'];
+    $photo_base64_with_prefix  = sunny_pool_format_base64_image_data_uri($photo_base64_raw);
+    $photo_mime_type           = !empty($photo_base64_clean) ? ($water_image_meta['mime'] ?: 'image/jpeg') : '';
 
     $source = sanitize_key($params['source'] ?? 'manual_form');
 
@@ -1520,10 +1817,11 @@ function sunny_pool_api_submit_water_analyse($request) {
         'pool_id'         => $pool_id,
         'user_id'         => $user_id,
         'source'          => $source,
-        'message'         => 'Analyser mon eau à partir de ses mesures (ph, chlore, tac, stabilisant, temperature) dans l\'analyse de l\'eau',
+        'message'         => 'Analyser mon eau à partir de ses mesures (ph, chlore, tac, stabilisant, temperature) ou bien à partir de la photo de la bandelette (photo_url, photo_base64) dans l\'analyse de l\'eau',
         'analyse'         => $normalized,
         'photo_url'       => $photo_url,
-        'photo_base64'    => $photo_base64_clean,
+        'image_base64'    => $photo_base64_with_prefix,
+        'image_mime_type' => $photo_mime_type,
         'callback_url'    => rest_url('sunny-pool/v1/analyse-callback'),
         'created_at'      => current_time('mysql'),
     ];
@@ -1587,6 +1885,196 @@ function sunny_pool_api_submit_water_analyse($request) {
     ], 201);
 }
 
+
+/**
+ * Soumettre une analyse d'eau (stockage + envoi n8n).
+ * POST /wp-json/sunny-pool/v1/analyse/photo
+ */
+function sunny_pool_api_submit_photo_analyse($request) {
+    global $wpdb;
+
+    $user_id = get_current_user_id();
+    $params  = $request->get_json_params();
+    $pool_id = intval($params['pool_id'] ?? 0);
+
+    if (!$pool_id || !sunny_pool_verify_pool_ownership($pool_id, $user_id)) {
+        return new WP_REST_Response([
+            'success' => false,
+            'message' => 'Piscine non trouvée ou accès refusé'
+        ], 403);
+    }
+
+    // ─────────────────────────────────────────
+    // MESURES
+    // ─────────────────────────────────────────
+    $analyse_data = $params['analyse'] ?? [];
+
+    $fields = ['ph', 'chlore', 'tac', 'stabilisant', 'temperature'];
+
+    $normalized = [];
+    $has_value  = false;
+
+    foreach ($fields as $field) {
+        if (isset($analyse_data[$field]) && $analyse_data[$field] !== '') {
+            $normalized[$field] = floatval($analyse_data[$field]);
+            $has_value = true;
+        } else {
+            $normalized[$field] = null;
+        }
+    }
+
+    // ─────────────────────────────────────────
+    // IMAGE UNIQUE
+    // ─────────────────────────────────────────
+    $photo_base64_raw = $params['photo_bandelette_base64']
+        ?? $params['image_base64']
+        ?? '';
+
+    $photo_url = '';
+
+    if (!empty($photo_base64_raw)) {
+        $has_value = true;
+
+        $attachment_id = sunny_pool_upload_base64_image($photo_base64_raw, $pool_id);
+
+        if (!is_wp_error($attachment_id)) {
+            $photo_url = wp_get_attachment_url($attachment_id);
+        }
+    }
+
+    // ─────────────────────────────────────────
+    // MULTI IMAGES
+    // ─────────────────────────────────────────
+    $images_input   = $params['images'] ?? [];
+    $images_payload = [];
+
+    if (is_array($images_input) && count($images_input) > 0) {
+        foreach ($images_input as $index => $img) {
+
+            $base64 = $img['base64'] ?? $img['image_base64'] ?? '';
+            if (empty($base64)) continue;
+
+            $has_value = true;
+
+            $type  = sanitize_key($img['type'] ?? 'general');
+            $label = sanitize_text_field($img['label'] ?? 'Image ' . ($index + 1));
+
+            $uploaded_url = '';
+
+            $attachment_id = sunny_pool_upload_base64_image($base64, $pool_id);
+
+            if (!is_wp_error($attachment_id)) {
+                $uploaded_url = wp_get_attachment_url($attachment_id);
+            }
+
+            $image_meta = sunny_pool_get_base64_image_meta($base64);
+
+            $images_payload[] = [
+                'type'   => $type,
+                'label'  => $label,
+                'mime_type' => !empty($image_meta['clean']) ? ($image_meta['mime'] ?: 'image/jpeg') : '',
+                'base64' => sunny_pool_format_base64_image_data_uri($base64),
+                'url'    => $uploaded_url,
+            ];
+        }
+    }
+
+    // ─────────────────────────────────────────
+    // VALIDATION
+    // ─────────────────────────────────────────
+    if (!$has_value) {
+        return new WP_REST_Response([
+            'success' => false,
+            'message' => 'Au moins une mesure ou une image est requise'
+        ], 400);
+    }
+
+    // ─────────────────────────────────────────
+    // INSERT DB
+    // ─────────────────────────────────────────
+    $analyse_id = 'ana-' . $user_id . '-' . $pool_id . '-' . time() . '-' . wp_rand(100, 999);
+
+    $table_name = $wpdb->prefix . 'sunny_water_analyses';
+
+    $inserted = $wpdb->insert($table_name, [
+        'user_id'              => $user_id,
+        'pool_id'              => $pool_id,
+        'analyse_id'           => $analyse_id,
+        'ph'                   => $normalized['ph'],
+        'chlore'               => $normalized['chlore'],
+        'tac'                  => $normalized['tac'],
+        'stabilisant'          => $normalized['stabilisant'],
+        'temperature'          => $normalized['temperature'],
+        'photo_bandelette_url' => $photo_url,
+        'status'               => 'pending',
+        'created_at'           => current_time('mysql'),
+    ]);
+
+    if (!$inserted) {
+        return new WP_REST_Response([
+            'success' => false,
+            'message' => 'Impossible d’enregistrer l’analyse'
+        ], 500);
+    }
+
+    // ─────────────────────────────────────────
+    // PAYLOAD N8N
+    // ─────────────────────────────────────────
+    $main_image_meta = sunny_pool_get_base64_image_meta($photo_base64_raw);
+
+    $payload = [
+        'type'       => 'image_analysis',
+        'analyse_id' => $analyse_id,
+        'pool_id'    => $pool_id,
+        'user_id'    => $user_id,
+        'source'     => sanitize_key($params['source'] ?? 'photo'),
+
+        'analyse' => $normalized,
+
+        'image_mime_type' => !empty($main_image_meta['clean']) ? ($main_image_meta['mime'] ?: 'image/jpeg') : '',
+        'image_base64' => sunny_pool_format_base64_image_data_uri($photo_base64_raw),
+        'image_type'   => sanitize_key($params['image_type'] ?? 'general'),
+        'photo_url'    => $photo_url,
+
+        'images' => $images_payload,
+
+        'pool' => [
+            'id'         => $pool_id,
+            'type'       => sanitize_key($params['pool']['type'] ?? ''),
+            'volume'     => sanitize_text_field($params['pool']['volume'] ?? ''),
+            'filtre'     => sanitize_key($params['pool']['filtre'] ?? ''),
+            'traitement' => sanitize_key($params['pool']['traitement'] ?? ''),
+        ],
+
+        'callback_url' => rest_url('sunny-pool/v1/analyse-callback'),
+        'created_at'   => current_time('mysql'),
+    ];
+
+    $response = wp_remote_post(SUNNY_N8N_ANALYSEP_WEBHOOK_URL, [
+        'headers' => ['Content-Type' => 'application/json'],
+        'body'    => wp_json_encode($payload),
+        'timeout' => 20,
+    ]);
+
+    error_log('Retour n8n:' .$response);
+
+    if (is_wp_error($response)) {
+        $wpdb->update($table_name, ['status' => 'error'], ['analyse_id' => $analyse_id]);
+
+        return new WP_REST_Response([
+            'success' => false,
+            'message' => 'n8n indisponible',
+            'error'   => $response->get_error_message()
+        ], 503);
+    }
+
+    return new WP_REST_Response([
+        'success'    => true,
+        'analyse_id' => $analyse_id,
+        'status'     => 'pending'
+    ], 201);
+}
+
 /**
  * Historique des analyses d'eau d'une piscine.
  * GET /wp-json/sunny-pool/v1/analyse/history?pool_id=123
@@ -1635,6 +2123,66 @@ function sunny_pool_api_get_water_analyses_history($request) {
 }
 
 /**
+ * Polling pour vérifier si une réponse est arrivée (flux asynchrone)
+ * GET /wp-json/sunny-pool/v1/analyse/poll?analyse_id=xxx
+ */
+function sunny_pool_api_analyse_poll($request) {
+    global $wpdb;
+    $user_id = get_current_user_id();
+    $analyse_id = $request->get_param('analyse_id');
+
+    error_log('[Sunny Poll] Recherche analyse_id: ' . $analyse_id . ', user_id: ' . $user_id);
+
+    $table_name = $wpdb->prefix . 'sunny_water_analyses';
+
+    // Chercher un message avec cette analyse_id qui a une réponse
+    $message = $wpdb->get_row($wpdb->prepare(
+        "SELECT * FROM $table_name 
+        WHERE analyse_id = %s 
+        AND user_id = %d 
+        AND (response_n8n IS NOT NULL AND response_n8n != '') 
+        AND response_n8n != '[async]'
+        ORDER BY created_at DESC 
+        LIMIT 1",
+        $analyse_id,
+        $user_id
+    ), ARRAY_A);
+
+    if ($message) {
+        error_log('[Sunny Poll] Réponse trouvée pour ' . $analyse_id);
+
+        /* // Décoder les champs JSON stockés
+        $analyse_decoded = !empty($message['analyse_extraite'])
+            ? json_decode($message['analyse_extraite'], true)
+            : null;
+        $alertes_decoded = !empty($message['alertes_json'])
+            ? json_decode($message['alertes_json'], true)
+            : []; */
+
+        return new WP_REST_Response([
+            'success'          => true,
+            'found'            => true,
+            'response'         => $message['response_n8n'],
+            //'analyse_extraite' => $analyse_decoded,   // null ou {ph, chlore, tac, ...}
+            //'score_eau'        => $message['score_eau'] !== null ? intval($message['score_eau']) : null,
+            //'alertes'          => $alertes_decoded,
+            //'has_image'        => (bool) $message['has_image'],
+            'status'           => $message['status'],
+            'created_at'       => $message['created_at'],
+        ], 200);
+    }
+
+    error_log('[Sunny Poll] Pas encore de réponse pour ' . $analyse_id);
+
+    // Pas encore de réponse
+    return new WP_REST_Response([
+        'success' => true,
+        'found'   => false,
+        'message' => 'En attente de réponse...',
+    ], 200);
+}
+
+/**
  * Callback n8n pour mise à jour de l'analyse d'eau.
  * POST /wp-json/sunny-pool/v1/analyse-callback
  */
@@ -1675,6 +2223,288 @@ function sunny_pool_api_analyse_callback($request) {
     return new WP_REST_Response(['success' => true, 'message' => 'Analyse mise à jour'], 200);
 }
 
+
+// ========== FONCTIONS CRUD PLANNING ==========
+
+/**
+ * Liste les plannings de l'utilisateur (optionnellement filtrés par piscine)
+ * GET /wp-json/sunny-pool/v1/planning?pool_id=123
+ */
+function sunny_pool_api_list_plannings($request) {
+    global $wpdb;
+    $user_id = get_current_user_id();
+    $pool_id = intval($request->get_param('pool_id'));
+
+    if ($pool_id && !sunny_pool_verify_pool_ownership($pool_id, $user_id)) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Piscine non trouvée ou accès refusé'], 403);
+    }
+
+    $table_planning = $wpdb->prefix . 'sunny_planning';
+
+    if ($pool_id) {
+        $plannings = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM $table_planning WHERE user_id = %d AND pool_id = %d ORDER BY startTime ASC",
+            $user_id,
+            $pool_id
+        ), ARRAY_A);
+    } else {
+        $plannings = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM $table_planning WHERE user_id = %d ORDER BY startTime ASC",
+            $user_id
+        ), ARRAY_A);
+    }
+
+    $formatted = array_map(function($p) {
+        return [
+            'id'         => intval($p['id']),
+            'user_id'    => intval($p['user_id']),
+            'pool_id'    => intval($p['pool_id']),
+            'title'      => $p['title'],
+            'startTime'  => $p['startTime'],
+            'endTime'    => $p['endTime'],
+            'notes'      => $p['notes'],
+            'isDone'     => (bool) $p['isDone'],
+            'created_at' => $p['created_at'],
+            'updated_at' => $p['updated_at'],
+        ];
+    }, $plannings ?: []);
+
+    return new WP_REST_Response([
+        'success' => true,
+        'count'   => count($formatted),
+        'data'    => $formatted,
+    ], 200);
+}
+
+/**
+ * Récupère un planning spécifique
+ * GET /wp-json/sunny-pool/v1/planning/{id}
+ */
+function sunny_pool_api_get_planning($request) {
+    global $wpdb;
+    $planning_id = intval($request->get_param('id'));
+
+    $table_planning = $wpdb->prefix . 'sunny_planning';
+    $planning = $wpdb->get_row($wpdb->prepare(
+        "SELECT * FROM $table_planning WHERE id = %d",
+        $planning_id
+    ), ARRAY_A);
+
+    if (!$planning) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Planning non trouvé'], 404);
+    }
+
+    return new WP_REST_Response([
+        'success' => true,
+        'data'    => [
+            'id'         => intval($planning['id']),
+            'user_id'    => intval($planning['user_id']),
+            'pool_id'    => intval($planning['pool_id']),
+            'title'      => $planning['title'],
+            'startTime'  => $planning['startTime'],
+            'endTime'    => $planning['endTime'],
+            'notes'      => $planning['notes'],
+            'isDone'     => (bool) $planning['isDone'],
+            'created_at' => $planning['created_at'],
+            'updated_at' => $planning['updated_at'],
+        ],
+    ], 200);
+}
+
+/**
+ * Crée un planning
+ * POST /wp-json/sunny-pool/v1/planning
+ * Body : { "pool_id": 123, "title": "Nettoyage", "startTime": "2026-05-10 09:00:00", "endTime": "2026-05-10 10:00:00", "notes": "...", "isDone": false }
+ */
+function sunny_pool_api_create_planning($request) {
+    global $wpdb;
+    $user_id = get_current_user_id();
+    $params  = $request->get_json_params();
+
+    $pool_id   = intval($params['pool_id'] ?? 0);
+    $title     = sanitize_text_field($params['title'] ?? 'Nouvelle tâche');
+    $start_raw = $params['startTime'] ?? '';
+
+    if (!$pool_id) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Le champ pool_id est requis'], 400);
+    }
+
+    if (!sunny_pool_verify_pool_ownership($pool_id, $user_id)) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Piscine non trouvée ou accès refusé'], 403);
+    }
+
+    if (empty($start_raw) || strtotime($start_raw) === false) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Le champ startTime est requis et doit être une date valide'], 400);
+    }
+
+    $start_time = date('Y-m-d H:i:s', strtotime($start_raw));
+    $end_time   = null;
+    if (array_key_exists('endTime', $params) && $params['endTime'] !== null && $params['endTime'] !== '') {
+        if (strtotime($params['endTime']) === false) {
+            return new WP_REST_Response(['success' => false, 'message' => 'Le champ endTime doit être une date valide'], 400);
+        }
+        $end_time = date('Y-m-d H:i:s', strtotime($params['endTime']));
+    }
+
+    $notes   = isset($params['notes']) ? sanitize_textarea_field($params['notes']) : null;
+    $is_done = !empty($params['isDone']) ? 1 : 0;
+
+    $table_planning = $wpdb->prefix . 'sunny_planning';
+    $inserted = $wpdb->insert($table_planning, [
+        'user_id'    => $user_id,
+        'pool_id'    => $pool_id,
+        'title'      => $title,
+        'startTime'  => $start_time,
+        'endTime'    => $end_time,
+        'notes'      => $notes,
+        'isDone'     => $is_done,
+        'created_at' => current_time('mysql'),
+        'updated_at' => current_time('mysql'),
+    ]);
+
+    if (!$inserted) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Erreur lors de la création du planning'], 500);
+    }
+
+    $planning_id = (int) $wpdb->insert_id;
+    $planning = $wpdb->get_row($wpdb->prepare(
+        "SELECT * FROM $table_planning WHERE id = %d",
+        $planning_id
+    ), ARRAY_A);
+
+    return new WP_REST_Response([
+        'success' => true,
+        'message' => 'Planning créé avec succès',
+        'data'    => [
+            'id'         => intval($planning['id']),
+            'user_id'    => intval($planning['user_id']),
+            'pool_id'    => intval($planning['pool_id']),
+            'title'      => $planning['title'],
+            'startTime'  => $planning['startTime'],
+            'endTime'    => $planning['endTime'],
+            'notes'      => $planning['notes'],
+            'isDone'     => (bool) $planning['isDone'],
+            'created_at' => $planning['created_at'],
+            'updated_at' => $planning['updated_at'],
+        ],
+    ], 201);
+}
+
+/**
+ * Met à jour un planning
+ * PUT /wp-json/sunny-pool/v1/planning/{id}
+ */
+function sunny_pool_api_update_planning($request) {
+    global $wpdb;
+    $planning_id = intval($request->get_param('id'));
+    $params      = $request->get_json_params();
+
+    $table_planning = $wpdb->prefix . 'sunny_planning';
+    $planning = $wpdb->get_row($wpdb->prepare(
+        "SELECT * FROM $table_planning WHERE id = %d",
+        $planning_id
+    ), ARRAY_A);
+
+    if (!$planning) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Planning non trouvé'], 404);
+    }
+
+    $data = [];
+
+    if (isset($params['title'])) {
+        $data['title'] = sanitize_text_field($params['title']);
+    }
+
+    if (isset($params['startTime'])) {
+        if (strtotime($params['startTime']) === false) {
+            return new WP_REST_Response(['success' => false, 'message' => 'Le champ startTime doit être une date valide'], 400);
+        }
+        $data['startTime'] = date('Y-m-d H:i:s', strtotime($params['startTime']));
+    }
+
+    if (array_key_exists('endTime', $params)) {
+        if ($params['endTime'] === null || $params['endTime'] === '') {
+            $data['endTime'] = null;
+        } else {
+            if (strtotime($params['endTime']) === false) {
+                return new WP_REST_Response(['success' => false, 'message' => 'Le champ endTime doit être une date valide'], 400);
+            }
+            $data['endTime'] = date('Y-m-d H:i:s', strtotime($params['endTime']));
+        }
+    }
+
+    if (isset($params['notes'])) {
+        $data['notes'] = sanitize_textarea_field($params['notes']);
+    }
+
+    if (isset($params['isDone'])) {
+        $data['isDone'] = !empty($params['isDone']) ? 1 : 0;
+    }
+
+    if (empty($data)) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Aucune donnée à mettre à jour'], 400);
+    }
+
+    $data['updated_at'] = current_time('mysql');
+
+    $updated = $wpdb->update($table_planning, $data, ['id' => $planning_id]);
+    if ($updated === false) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Erreur lors de la mise à jour du planning'], 500);
+    }
+
+    $planning_updated = $wpdb->get_row($wpdb->prepare(
+        "SELECT * FROM $table_planning WHERE id = %d",
+        $planning_id
+    ), ARRAY_A);
+
+    return new WP_REST_Response([
+        'success' => true,
+        'message' => 'Planning mis à jour avec succès',
+        'data'    => [
+            'id'         => intval($planning_updated['id']),
+            'user_id'    => intval($planning_updated['user_id']),
+            'pool_id'    => intval($planning_updated['pool_id']),
+            'title'      => $planning_updated['title'],
+            'startTime'  => $planning_updated['startTime'],
+            'endTime'    => $planning_updated['endTime'],
+            'notes'      => $planning_updated['notes'],
+            'isDone'     => (bool) $planning_updated['isDone'],
+            'created_at' => $planning_updated['created_at'],
+            'updated_at' => $planning_updated['updated_at'],
+        ],
+    ], 200);
+}
+
+/**
+ * Supprime un planning
+ * DELETE /wp-json/sunny-pool/v1/planning/{id}
+ */
+function sunny_pool_api_delete_planning($request) {
+    global $wpdb;
+    $planning_id = intval($request->get_param('id'));
+
+    $table_planning = $wpdb->prefix . 'sunny_planning';
+
+    $planning = $wpdb->get_row($wpdb->prepare(
+        "SELECT id FROM $table_planning WHERE id = %d",
+        $planning_id
+    ));
+
+    if (!$planning) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Planning non trouvé'], 404);
+    }
+
+    $deleted = $wpdb->delete($table_planning, ['id' => $planning_id], ['%d']);
+    if ($deleted === false) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Erreur lors de la suppression du planning'], 500);
+    }
+
+    return new WP_REST_Response([
+        'success' => true,
+        'message' => 'Planning supprimé avec succès',
+        'data'    => ['id' => $planning_id],
+    ], 200);
+}
 // ========== FONCTIONS CRUD THREADS (DISCUSSIONS) ==========
 
 /**
@@ -1706,7 +2536,7 @@ function sunny_pool_api_list_threads($request) {
                 (SELECT COUNT(*) FROM $table_messages WHERE thread_id = t.id) AS message_count,
                 (SELECT m.message FROM $table_messages m WHERE m.thread_id = t.id ORDER BY m.created_at DESC LIMIT 1) AS last_message
          FROM $table_threads t
-         WHERE t.user_id = %d AND t.pool_id = %d
+         WHERE t.folder_id IS NULL AND t.user_id = %d AND t.pool_id = %d 
          ORDER BY t.updated_at DESC
          LIMIT 50",
         $user_id, $pool_id
@@ -1717,6 +2547,7 @@ function sunny_pool_api_list_threads($request) {
         $formatted[] = [
             'id'            => intval($t['id']),
             'title'         => $t['title'],
+            'favorites'     => boolval($t['favorites'] ?? ($t['favorite'] ?? false)),
             'message_count' => intval($t['message_count']),
             'last_message'  => $t['last_message'] ? mb_substr($t['last_message'], 0, 60) : '',
             'created_at'    => $t['created_at'],
@@ -1777,7 +2608,7 @@ function sunny_pool_api_create_thread($request) {
 
 /**
  * Renomme un thread
- * PUT /wp-json/sunny-pool/v1/chat/threads/{thread_id}
+ * PUT /wp-json/sunny-pool/v1/chat/threads/{thread_id}/rename
  * Body : { "title": "Nouveau titre" }
  */
 function sunny_pool_api_rename_thread($request) {
@@ -1810,6 +2641,78 @@ function sunny_pool_api_rename_thread($request) {
         'success' => true,
         'message' => 'Discussion renommée',
         'data'    => ['id' => $thread_id, 'title' => $new_title],
+    ], 200);
+}
+
+/**
+ * Ajoute/retire un thread des favoris
+ * PUT /wp-json/sunny-pool/v1/chat/threads/{thread_id}/favorite
+ * Body : { "favorites": true or false }
+ */
+function sunny_pool_api_favorite_thread($request) {
+    global $wpdb;
+    $user_id   = get_current_user_id();
+    $thread_id = intval($request->get_param('thread_id'));
+    $params       = $request->get_json_params();
+    $favorites    = boolval($params['favorites']);
+
+    if (empty($favorites)) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Le champ favorites est requis'], 400);
+    }
+
+    $table  = $wpdb->prefix . 'sunny_chat_threads';
+    $thread = $wpdb->get_row($wpdb->prepare(
+        "SELECT * FROM $table WHERE id = %d AND user_id = %d",
+        $thread_id, $user_id
+    ));
+
+    if (!$thread) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Discussion non trouvée'], 404);
+    }
+
+    /* $columns = $wpdb->get_col("SHOW COLUMNS FROM `$table`", 0);
+    if (empty($columns)) {
+        error_log('[Sunny Threads] Impossible de lire les colonnes de ' . $table . ' | SQL error: ' . $wpdb->last_error);
+        return new WP_REST_Response(['success' => false, 'message' => 'Impossible de lire la structure de la table'], 500);
+    }
+
+    $favorite_column = null; */
+   /*  if (in_array('favorites', $columns, true)) {
+        $favorite_column = 'favorites';
+    } elseif (in_array('favorite', $columns, true)) {
+        $favorite_column = 'favorite';
+    }
+
+    if (!$favorite_column) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Colonne favori absente en base (favorites/favorite)'], 500);
+    } */
+
+    $update_data   = ['favorites' => (int) $favorites];
+    $update_format = ['%d'];
+    /* if (in_array('updated_at', $columns, true)) {
+        $update_data['updated_at'] = current_time('mysql');
+        $update_format[] = '%s';
+    } */
+
+    $updated = $wpdb->update(
+        $table,
+        $update_data,
+        ['id' => $thread_id],
+        $update_format,
+        ['%d']
+    );
+
+    echo($updated);
+
+    if ($updated === false) {
+        error_log('[Sunny Threads] Update favori échoué | table=' . $table . ' | thread_id=' . $thread_id . ' | col=' . $favorite_column . ' | sql_error=' . $wpdb->last_error);
+        return new WP_REST_Response(['success' => false, 'message' => 'Impossible de mettre à jour le favori'], 500);
+    }
+
+    return new WP_REST_Response([
+        'success' => true,
+        'message' => 'Favori mis à jour',
+        'data'    => ['id' => $thread_id, 'favorites' => boolval($favorites)],
     ], 200);
 }
 
@@ -1897,6 +2800,523 @@ function sunny_pool_api_get_thread_messages($request) {
     ], 200);
 }
 
+/////////////////////////////////////////////////////////////////////////
+/**
+ * Liste les dossiers de threads d'une piscine
+ * GET /wp-json/sunny-pool/v1/folders?pool_id=123
+ */
+function sunny_pool_api_list_folder($request) {
+    global $wpdb;
+    $user_id = get_current_user_id();
+    $pool_id = intval($request->get_param('pool_id'));
+
+    if (!$pool_id || !sunny_pool_verify_pool_ownership($pool_id, $user_id)) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Piscine non trouvée ou accès refusé'], 403);
+    }
+
+    $table_folder = $wpdb->prefix . 'sunny_folder_threads';
+    $table_threads  = $wpdb->prefix . 'sunny_chat_threads';
+
+    $folders = $wpdb->get_results($wpdb->prepare(
+        "SELECT f.*,
+                (SELECT COUNT(*) FROM $table_threads t WHERE t.folder_id = f.id) AS threads_count,
+                (SELECT t.title FROM $table_threads t WHERE t.folder_id = f.id ORDER BY t.created_at DESC LIMIT 1) AS last_thread
+         FROM $table_folder f
+         WHERE f.user_id = %d AND f.pool_id = %d
+         ORDER BY f.updated_at DESC
+         LIMIT 50",
+        $user_id, $pool_id
+    ), ARRAY_A);
+
+    $formatted = [];
+    foreach ($folders as $f) {
+        $formatted[] = [
+            'id'            => intval($f['id']),
+            'name'         => $f['name'],
+            //'favorites'     => boolval($t['favorites'] ?? ($t['favorite'] ?? false)),
+            'thread_count' => intval($f['threads_count']),
+            'last_thread'  => $f['last_thread'] ? mb_substr($f['last_thread'], 0, 60) : '',
+            'created_at'    => $f['created_at'],
+            'updated_at'    => $f['updated_at'],
+        ];
+    }
+
+    return new WP_REST_Response([
+        'success' => true,
+        'count'   => count($formatted),
+        'data'    => $formatted,
+    ], 200);
+}
+
+/**
+ * Crée un nouveau dossier
+ * POST /wp-json/sunny-pool/v1/folder
+ * Body : { "pool_id": 123, "name": "Optionnel" }
+ */
+function sunny_pool_api_create_folder($request) {
+    global $wpdb;
+    $user_id = get_current_user_id();
+    $params  = $request->get_json_params();
+    $pool_id = intval($params['pool_id'] ?? 0);
+    $name   = sanitize_text_field($params['name'] ?? 'Nouveau dossier');
+
+    if (!$pool_id || !sunny_pool_verify_pool_ownership($pool_id, $user_id)) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Piscine non trouvée ou accès refusé'], 403);
+    }
+
+    $table = $wpdb->prefix . 'sunny_folder_threads';
+    $wpdb->insert($table, [
+        'user_id'    => $user_id,
+        'pool_id'    => $pool_id,
+        'name'      => $name,
+        'created_at' => current_time('mysql'),
+    ]);
+    $folder_id = (int) $wpdb->insert_id;
+
+    if (!$folder_id) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Erreur de création'], 500);
+    }
+
+    error_log('[Sunny Threads] Créé folder id=' . $folder_id . ' pool=' . $pool_id);
+
+    return new WP_REST_Response([
+        'success' => true,
+        'data'    => [
+            'id'            => $folder_id,
+            'name'         => $name,
+            'thread_count' => 0,
+            'last_thread'  => '',
+            'created_at'    => current_time('mysql'),
+            'updated_at'    => current_time('mysql'),
+        ],
+    ], 201);
+}
+
+/**
+ * Renomme un dossier thread
+ * PUT /wp-json/sunny-pool/v1/folder/{id}/rename
+ * Body : { "name": "Nouveau name" }
+ */
+function sunny_pool_api_rename_folder($request) {
+    global $wpdb;
+    $user_id   = get_current_user_id();
+    $folder_id = intval($request->get_param('folder_id'));
+    $params    = $request->get_json_params();
+    $new_name = sanitize_text_field($params['name'] ?? '');
+
+    if (empty($new_name)) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Le name est requis'], 400);
+    }
+
+    $table  = $wpdb->prefix . 'sunny_folder_threads';
+    $folder = $wpdb->get_row($wpdb->prepare(
+        "SELECT * FROM $table WHERE id = %d AND user_id = %d",
+        $folder_id, $user_id
+    ));
+
+    if (!$folder) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Dossier non trouvée'], 404);
+    }
+
+    $wpdb->update($table, [
+        'name'      => $new_name,
+        'updated_at' => current_time('mysql'),
+    ], ['id' => $folder_id]);
+
+    return new WP_REST_Response([
+        'success' => true,
+        'message' => 'Dossier renommée',
+        'data'    => ['id' => $folder_id, 'title' => $new_name],
+    ], 200);
+}
+
+/**
+ * Ajouter un thread dans un dossier
+ * PUT /wp-json/sunny-pool/v1/folder/{id}/thread
+ * Body : { "folder_id": "125" }
+ */
+function sunny_pool_api_thread_to_folder($request) {
+    global $wpdb;
+    $user_id   = get_current_user_id();
+    $folder_id = intval($request['folder_id']);
+    $thread_id = intval($request['thread_id']);
+    $params    = $request->get_json_params();
+
+    if (empty($folder_id)) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Le folder_id est requis'], 400);
+    }
+
+    if (empty($thread_id)) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Le thread_id est requis'], 400);
+    }
+
+    $table  = $wpdb->prefix . 'sunny_chat_threads';
+    $thread = $wpdb->get_row($wpdb->prepare(
+        "SELECT * FROM $table WHERE id = %d AND user_id = %d",
+        $thread_id, $user_id
+    ));
+
+    if (!$thread) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Discussion non trouvée', 'content' => [$folder_id, $thread_id, $user_id]], 404);
+    }
+
+    $wpdb->update($table, [
+        'folder_id'      => $folder_id,
+        'updated_at' => current_time('mysql'),
+    ], ['id' => $thread_id]);
+
+    return new WP_REST_Response([
+        'success' => true,
+        'message' => 'Ajout de la discussion avec succès',
+    ], 200);
+}
+ 
+/* *
+ * Ajoute/retire un thread des favoris
+ * PUT /wp-json/sunny-pool/v1/chat/threads/{thread_id}/favorite
+ * Body : { "favorites": true or false }
+ 
+function sunny_pool_api_favorite_thread($request) {
+    global $wpdb;
+    $user_id   = get_current_user_id();
+    $thread_id = intval($request->get_param('thread_id'));
+    $params       = $request->get_json_params();
+    $favorites    = boolval($params['favorites']);
+
+    if (empty($favorites)) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Le champ favorites est requis'], 400);
+    }
+
+    $table  = $wpdb->prefix . 'sunny_chat_threads';
+    $thread = $wpdb->get_row($wpdb->prepare(
+        "SELECT * FROM $table WHERE id = %d AND user_id = %d",
+        $thread_id, $user_id
+    ));
+
+    if (!$thread) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Discussion non trouvée'], 404);
+    }
+
+    /* $columns = $wpdb->get_col("SHOW COLUMNS FROM `$table`", 0);
+    if (empty($columns)) {
+        error_log('[Sunny Threads] Impossible de lire les colonnes de ' . $table . ' | SQL error: ' . $wpdb->last_error);
+        return new WP_REST_Response(['success' => false, 'message' => 'Impossible de lire la structure de la table'], 500);
+    }
+
+    $favorite_column = null; */
+   /*  if (in_array('favorites', $columns, true)) {
+        $favorite_column = 'favorites';
+    } elseif (in_array('favorite', $columns, true)) {
+        $favorite_column = 'favorite';
+    }
+
+    if (!$favorite_column) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Colonne favori absente en base (favorites/favorite)'], 500);
+    } 
+
+    $update_data   = ['favorites' => (int) $favorites];
+    $update_format = ['%d'];
+    /* if (in_array('updated_at', $columns, true)) {
+        $update_data['updated_at'] = current_time('mysql');
+        $update_format[] = '%s';
+    } 
+
+    $updated = $wpdb->update(
+        $table,
+        $update_data,
+        ['id' => $thread_id],
+        $update_format,
+        ['%d']
+    );
+
+    echo($updated);
+
+    if ($updated === false) {
+        error_log('[Sunny Threads] Update favori échoué | table=' . $table . ' | thread_id=' . $thread_id . ' | col=' . $favorite_column . ' | sql_error=' . $wpdb->last_error);
+        return new WP_REST_Response(['success' => false, 'message' => 'Impossible de mettre à jour le favori'], 500);
+    }
+
+    return new WP_REST_Response([
+        'success' => true,
+        'message' => 'Favori mis à jour',
+        'data'    => ['id' => $thread_id, 'favorites' => boolval($favorites)],
+    ], 200);
+} */
+
+/**
+ * Supprime un thread et tous ses messages (logique interne réutilisable)
+ */
+function sunny_pool_delete_thread_internal($thread_id, $user_id) {
+    global $wpdb;
+
+    $thread_id = intval($thread_id);
+    $user_id   = intval($user_id);
+
+    if ($thread_id <= 0 || $user_id <= 0) {
+        return new WP_Error('invalid_params', 'Paramètres de suppression invalides', ['status' => 400]);
+    }
+
+    $table_threads = $wpdb->prefix . 'sunny_chat_threads';
+    $thread = $wpdb->get_row($wpdb->prepare(
+        "SELECT id FROM $table_threads WHERE id = %d AND user_id = %d",
+        $thread_id,
+        $user_id
+    ));
+
+    if (!$thread) {
+        return new WP_Error('thread_not_found', 'Discussion non trouvée', ['status' => 404]);
+    }
+
+    $table_messages = $wpdb->prefix . 'sunny_chat_messages';
+    $deleted_msgs = $wpdb->delete($table_messages, ['thread_id' => $thread_id], ['%d']);
+
+    if ($deleted_msgs === false) {
+        return new WP_Error('delete_messages_failed', 'Impossible de supprimer les messages', ['status' => 500]);
+    }
+
+    $deleted_thread = $wpdb->delete($table_threads, ['id' => $thread_id], ['%d']);
+
+    if ($deleted_thread === false) {
+        return new WP_Error('delete_thread_failed', 'Impossible de supprimer la discussion', ['status' => 500]);
+    }
+
+    return [
+        'id' => $thread_id,
+        'deleted_messages' => intval($deleted_msgs),
+    ];
+}
+
+/**
+ * Supprime un dossier et tous ses threads/messages
+ * DELETE /wp-json/sunny-pool/v1/chat/folders/{folder_id}
+ */
+function sunny_pool_api_delete_folder($request) {
+    global $wpdb;
+
+    $user_id   = get_current_user_id();
+    $folder_id = intval($request->get_param('folder_id'));
+
+    if ($folder_id <= 0) {
+        return new WP_REST_Response(['success' => false, 'message' => 'ID dossier invalide'], 400);
+    }
+
+    $table_folder  = $wpdb->prefix . 'sunny_folder_threads';
+    $table_threads = $wpdb->prefix . 'sunny_chat_threads';
+
+    $folder = $wpdb->get_row($wpdb->prepare(
+        "SELECT id FROM $table_folder WHERE id = %d AND user_id = %d",
+        $folder_id,
+        $user_id
+    ));
+
+    if (!$folder) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Dossier non trouvé'], 404);
+    }
+
+    $thread_ids = $wpdb->get_col($wpdb->prepare(
+        "SELECT id FROM $table_threads WHERE folder_id = %d AND user_id = %d",
+        $folder_id,
+        $user_id
+    ));
+
+    $deleted_threads = 0;
+    $deleted_messages = 0;
+
+    foreach ($thread_ids as $thread_id) {
+        $result = sunny_pool_delete_thread_internal(intval($thread_id), $user_id);
+
+        if (is_wp_error($result)) {
+            $status = 500;
+            $error_data = $result->get_error_data();
+            if (is_array($error_data) && !empty($error_data['status'])) {
+                $status = intval($error_data['status']);
+            }
+
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'Suppression interrompue: ' . $result->get_error_message(),
+                'data'    => [
+                    'folder_id'         => $folder_id,
+                    'deleted_threads'   => $deleted_threads,
+                    'deleted_messages'  => $deleted_messages,
+                ],
+            ], $status);
+        }
+
+        $deleted_threads++;
+        $deleted_messages += intval($result['deleted_messages']);
+    }
+
+    $deleted_folder = $wpdb->delete($table_folder, ['id' => $folder_id], ['%d']);
+
+    if ($deleted_folder === false) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Impossible de supprimer le dossier'], 500);
+    }
+
+    error_log('[Sunny Folder] Supprimé dossier id=' . $folder_id . ' + ' . $deleted_threads . ' threads + ' . $deleted_messages . ' messages');
+
+    return new WP_REST_Response([
+        'success' => true,
+        'message' => 'Dossier, discussions et messages supprimés',
+        'data'    => [
+            'folder_id'         => $folder_id,
+            'deleted_threads'   => $deleted_threads,
+            'deleted_messages'  => $deleted_messages,
+        ],
+    ], 200);
+}
+
+/**
+ * Lister les discussions d'un dossier
+ * GET /wp-json/sunny-pool/v1/threads/folder/{folder_id}
+ */
+function sunny_pool_api_get_thread_folder($request) {
+    global $wpdb;
+    $user_id   = get_current_user_id();
+    $folder_id = intval($request->get_param('folder_id'));
+
+    // Vérifier ownership du thread
+    $table_threads = $wpdb->prefix . 'sunny_chat_threads';
+    $threads = $wpdb->get_results($wpdb->prepare(
+        "SELECT * FROM $table_threads WHERE folder_id = %d AND user_id = %d",
+        $folder_id, $user_id
+    ), ARRAY_A);
+
+    if (!$threads) {
+        return new WP_REST_Response(['success' => false, 'message' => 'Discussion non trouvée'], 404);
+    }
+
+    $formatted = [];
+    foreach ($threads as $row) {
+        $formatted[] = [
+            'date'             => $row['created_at'],
+            'title'          => $row['title'],
+            'id'         => $row['id'],
+            'favorites' => boolval($row['favorites'])
+        ];
+    }
+
+    return new WP_REST_Response([
+        'success'   => true,
+        'count'     => count($formatted),
+        'data'      => $formatted
+    ], 200);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Nettoie une image base64:
+ * - retire le préfixe data:image/...;base64, si présent
+ * - supprime les espaces / retours ligne
+ * @param mixed $base64_data
+ * @return string
+ */
+function sunny_pool_clean_base64_image($base64_data) {
+    if (!is_string($base64_data) || $base64_data === '') {
+        return '';
+    }
+
+    if (preg_match('/^data:image\/[^;]+;base64,(.+)$/s', $base64_data, $m)) {
+        $base64_data = $m[1];
+    }
+
+    return preg_replace('/\s+/', '', $base64_data);
+}
+
+/**
+ * Détecte le type MIME d'une image binaire.
+ * @param string $image_data
+ * @return string
+ */
+function sunny_pool_detect_image_mime_from_binary($image_data) {
+    if (!is_string($image_data) || $image_data === '') {
+        return '';
+    }
+
+    $mime_type = '';
+
+    if (function_exists('finfo_open')) {
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        if ($finfo) {
+            $mime_type = finfo_buffer($finfo, $image_data);
+            finfo_close($finfo);
+        }
+    }
+
+    if (empty($mime_type) && function_exists('getimagesizefromstring')) {
+        $image_info = @getimagesizefromstring($image_data);
+        if (is_array($image_info) && !empty($image_info['mime'])) {
+            $mime_type = $image_info['mime'];
+        }
+    }
+
+    if ($mime_type === 'image/jpg') {
+        $mime_type = 'image/jpeg';
+    }
+
+    return strtolower(trim((string) $mime_type));
+}
+
+/**
+ * Retourne les métadonnées d'une image base64:
+ * - clean: base64 sans préfixe
+ * - mime: type MIME détecté (depuis préfixe ou contenu binaire)
+ *
+ * @param mixed $base64_data
+ * @return array{clean:string,mime:string}
+ */
+function sunny_pool_get_base64_image_meta($base64_data) {
+    if (!is_string($base64_data) || $base64_data === '') {
+        return ['clean' => '', 'mime' => ''];
+    }
+
+    $raw = trim($base64_data);
+    $mime_from_prefix = '';
+
+    if (preg_match('/^data:([^;]+);base64,(.+)$/si', $raw, $m)) {
+        $mime_from_prefix = strtolower(trim($m[1]));
+        $raw = $m[2];
+    }
+
+    $clean = preg_replace('/\s+/', '', $raw);
+    if ($clean === '') {
+        return ['clean' => '', 'mime' => ''];
+    }
+
+    $detected_mime = '';
+    $binary = base64_decode($clean, true);
+    if ($binary !== false) {
+        $detected_mime = sunny_pool_detect_image_mime_from_binary($binary);
+    }
+
+    $mime = $detected_mime ?: $mime_from_prefix;
+    if ($mime === 'image/jpg') {
+        $mime = 'image/jpeg';
+    }
+
+    return [
+        'clean' => $clean,
+        'mime'  => $mime,
+    ];
+}
+
+/**
+ * Force le format data URI pour une image base64.
+ * Ex: data:image/jpeg;base64,xxxx
+ *
+ * @param mixed $base64_data
+ * @return string
+ */
+function sunny_pool_format_base64_image_data_uri($base64_data) {
+    $meta = sunny_pool_get_base64_image_meta($base64_data);
+    if (empty($meta['clean'])) {
+        return '';
+    }
+
+    $mime = $meta['mime'] ?: 'image/jpeg';
+    return 'data:' . $mime . ';base64,' . $meta['clean'];
+}
 
 
 /**
@@ -1907,19 +3327,14 @@ function sunny_pool_api_get_thread_messages($request) {
  */
 function sunny_pool_upload_base64_image($base64_data, $parent_post_id = 0) {
     // Nettoyer le base64 (retirer le préfixe data:image si présent)
-    if (preg_match('/^data:image\/[^;]+;base64,(.+)$/s', $base64_data, $m)) {
-        $base64_clean = $m[1];
-    } else {
-        $base64_clean = $base64_data;
-    }
-
-    $base64_clean = preg_replace('/\s+/', '', $base64_clean);
+    $meta = sunny_pool_get_base64_image_meta($base64_data);
+    $base64_clean = $meta['clean'];
 
     if (empty($base64_clean)) {
         return new WP_Error('empty_image', 'Image base64 vide');
     }
 
-    $image_data = base64_decode($base64_clean);
+    $image_data = base64_decode($base64_clean, true);
     if ($image_data === false) {
         return new WP_Error('decode_error', 'Impossible de décoder l\'image base64');
     }
@@ -1929,10 +3344,11 @@ function sunny_pool_upload_base64_image($base64_data, $parent_post_id = 0) {
         return new WP_Error('image_too_large', 'Image trop volumineuse (max 10 Mo)');
     }
 
-    // Détecter le type MIME
-    $finfo = finfo_open(FILEINFO_MIME_TYPE);
-    $mime_type = finfo_buffer($finfo, $image_data);
-    finfo_close($finfo);
+    // Détecter le type MIME (depuis binaire + fallback préfixe data:)
+    $mime_type = sunny_pool_detect_image_mime_from_binary($image_data);
+    if (empty($mime_type)) {
+        $mime_type = strtolower((string) ($meta['mime'] ?? ''));
+    }
 
     $allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     if (!in_array($mime_type, $allowed_types)) {

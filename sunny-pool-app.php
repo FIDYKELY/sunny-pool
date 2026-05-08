@@ -12,9 +12,9 @@ if (!defined('ABSPATH')) exit;
 // Exécuté à l'activation ET à chaque chargement si la version DB a changé
 register_activation_hook(__FILE__, 'sunny_pool_create_db');
 add_action('plugins_loaded', function() {
-    if (get_option('sunny_pool_db_version') !== '2.5') {
+    if (get_option('sunny_pool_db_version') !== '2.7') {
         sunny_pool_create_db();
-        update_option('sunny_pool_db_version', '2.5');
+        update_option('sunny_pool_db_version', '2.7');
     }
 });
 function sunny_pool_create_db() {
@@ -57,12 +57,31 @@ function sunny_pool_create_db() {
         user_id bigint(20) NOT NULL,
         pool_id bigint(20) NOT NULL,
         title varchar(255) DEFAULT 'Nouvelle discussion',
+        favorites BOOLEAN DEFAULT false,
+        folder_id bigint(20),
+        created_at datetime DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        CONSTRAINT FK_FolderThreads FOREIGN KEY (folder_id) 
+            REFERENCES sunny_folder_threads(id)
+        KEY user_pool (user_id,pool_id)
+    ) $charset_collate;";
+    dbDelta($sql_threads);
+
+     // ── Table dossier threads (nouvelle v2.7) ───────────────────────────────────
+    $table_folder = $wpdb->prefix . 'sunny_folder_threads';
+    $sql_folder = "CREATE TABLE $table_folder (
+        id bigint(20) NOT NULL AUTO_INCREMENT,
+        user_id bigint(20) NOT NULL,
+        pool_id bigint(20) NOT NULL,
+        name varchar(255) DEFAULT 'Nouveau dossier',
+        favorites BOOLEAN DEFAULT false,
         created_at datetime DEFAULT CURRENT_TIMESTAMP,
         updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (id),
         KEY user_pool (user_id,pool_id)
     ) $charset_collate;";
-    dbDelta($sql_threads);
+    dbDelta($sql_folder);
 
     // ── Table analyses eau (nouvelle v2.5) ────────────────────────────────
     $table_analyses = $wpdb->prefix . 'sunny_water_analyses';
@@ -90,7 +109,7 @@ function sunny_pool_create_db() {
     ) $charset_collate;";
     dbDelta($sql_analyses);
 
-    error_log('[Sunny Pool] Tables ' . $table_messages . ', ' . $table_threads . ' et ' . $table_analyses . ' créées/mises à jour (v2.5)');
+    error_log('[Sunny Pool] Tables ' . $table_messages . ', ' . $table_threads . ' et ' . $table_analyses . ' créées/mises à jour (v2.7)');
 }
 
 // Inclure le fichier API REST
@@ -100,10 +119,17 @@ require_once plugin_dir_path(__FILE__) . 'sunny-pool-api.php';
 add_shortcode('user_piscine', 'sunny_pool_display');
 function sunny_pool_display() {
     if (!is_user_logged_in()) {
-        return '<p>Veuillez vous connecter.</p>';
+        $login_url = home_url('/connexion/') . '?redirect_to=' . urlencode(get_permalink());
+        $signup_url = home_url('/register/');
+        return '<div style="text-align:center;padding:40px 20px;">'
+             . '<p style="color:#d4af37;font-size:1.1em;font-weight:600;">Connectez-vous pour voir vos piscines 🏊</p>'
+             . '<p><a href="' . esc_url($login_url) . '" style="display:inline-block;padding:12px 28px;background:#d4af37;color:#1a1600;border-radius:10px;text-decoration:none;font-weight:700;">Se connecter</a></p>'
+             . '<p style="color:#94a3b8;font-size:0.9em;margin-top:16px;">Pas encore de compte ? <a href="' . esc_url($signup_url) . '" style="color:#eab308;">Créer un abonnement</a></p>'
+             . '</div>';
     }
 
     $user_id = get_current_user_id();
+    $logout_url = wp_logout_url(get_permalink());
 
     $args = [
         'post_type'      => 'piscine',
@@ -124,6 +150,15 @@ function sunny_pool_display() {
     }
 
     ob_start();
+    ?>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; padding:12px 16px; background:rgba(28,31,38,0.95); border-radius:14px; border:1px solid rgba(212,175,55,0.15);">
+        <div style="display:flex; gap:8px; align-items:center;">
+            <a href="<?php echo esc_url(home_url('/')); ?>" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:999px;color:#8a8f9e;text-decoration:none;font-size:13px;font-weight:500;transition:all 0.2s;">🏠 Accueil</a>
+            <a href="<?php echo esc_url(home_url('/ajouter-ma-piscine/')); ?>" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:999px;color:#8a8f9e;text-decoration:none;font-size:13px;font-weight:500;transition:all 0.2s;">➕ Ajouter</a>
+        </div>
+        <a href="<?php echo esc_url($logout_url); ?>" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:rgba(255,94,94,0.08);border:1px solid rgba(255,94,94,0.15);border-radius:999px;color:#ff8585;text-decoration:none;font-size:13px;font-weight:500;transition:all 0.2s;">🚪 Déconnexion</a>
+    </div>
+    <?php
     while ($query->have_posts()) {
         $query->the_post();
         $post_id = get_the_ID();
@@ -192,7 +227,13 @@ function sunny_pool_display() {
 add_shortcode('sunny_pool_form', 'sunny_pool_form_shortcode');
 function sunny_pool_form_shortcode() {
     if (!is_user_logged_in()) {
-        return '<p>Veuillez vous <a href="' . wp_login_url(get_permalink()) . '">connecter</a> pour ajouter votre piscine.</p>';
+        $login_url = home_url('/connexion/') . '?redirect_to=' . urlencode(get_permalink());
+        $signup_url = home_url('/register/');
+        return '<div style="text-align:center;padding:40px 20px;">'
+             . '<p style="color:#d4af37;font-size:1.1em;font-weight:600;">Connectez-vous pour ajouter votre piscine 🏊</p>'
+             . '<p><a href="' . esc_url($login_url) . '" style="display:inline-block;padding:12px 28px;background:#d4af37;color:#1a1600;border-radius:10px;text-decoration:none;font-weight:700;">Se connecter</a></p>'
+             . '<p style="color:#94a3b8;font-size:0.9em;margin-top:16px;">Pas encore de compte ? <a href="' . esc_url($signup_url) . '" style="color:#eab308;">Créer un abonnement</a></p>'
+             . '</div>';
     }
 
     // Traitement du formulaire
@@ -207,7 +248,15 @@ function sunny_pool_form_shortcode() {
     }
 
     ob_start();
+    $logout_url = wp_logout_url(get_permalink());
     ?>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; padding:12px 16px; background:rgba(28,31,38,0.95); border-radius:14px; border:1px solid rgba(212,175,55,0.15);">
+        <div style="display:flex; gap:8px; align-items:center;">
+            <a href="<?php echo esc_url(home_url('/')); ?>" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:999px;color:#8a8f9e;text-decoration:none;font-size:13px;font-weight:500;">🏠 Accueil</a>
+            <a href="<?php echo esc_url(home_url('/mes-piscines/')); ?>" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:999px;color:#8a8f9e;text-decoration:none;font-size:13px;font-weight:500;">🏊 Mes piscines</a>
+        </div>
+        <a href="<?php echo esc_url($logout_url); ?>" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:rgba(255,94,94,0.08);border:1px solid rgba(255,94,94,0.15);border-radius:999px;color:#ff8585;text-decoration:none;font-size:13px;font-weight:500;">🚪 Déconnexion</a>
+    </div>
     <form method="post" enctype="multipart/form-data" class="sunny-pool-form">
         <?php wp_nonce_field('sunny_pool_action', 'sunny_pool_nonce'); ?>
 
